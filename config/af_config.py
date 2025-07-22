@@ -1,39 +1,7 @@
-# HOME_APP_URL_PID  返回数据格式
-# [
-#         "ok":
-#         "data":[
-#             {
-#                 "advertiser":
-#                 "icon_url":
-#                 "app_name":
-#                 "company":
-#                 "app_id":
-#                 "platform":
-#             } .....
-#         ]
-# ]
+
 
 HOME_APP_URL_PID = "https://hq1.appsflyer.com/app/apps/get-adnet-apps"
-# HOME_APP_URL_PRT  返回数据格式
-# {
-# ..........
-#     apps:[
-#         {
-#             id:
-#             deleted:
-#             platform:
-#             icon-url:
-#             localization:{
-#                 timezone: 
-#                 currency:
-#                 }
-#             name:
-#         }
-#     ]
-#    user:{
-#       agencyId:
-#     }
-# }
+
 HOME_APP_URL_PRT = "https://hq1.appsflyer.com/cdp/get-data?fullAccountData=true"
 
 TABLE_URL = "https://hq1.appsflyer.com/unified/data?widget=ltv-table:3"
@@ -65,18 +33,6 @@ GROUP_FILTER_PRT = {
 GROUP_FILTER_PID= GROUP_FILTER_PRT.copy()
 GROUP_FILTER_PID["filters"]["event_name"] = ["app_initial_open","signup","ftd"]
 
-
-
-
-
-# result
-# {
-#     "data":[
-#         "adset":
-#         attributionSourceAppsflyerFiltersGranularityMetricIdInstallsUaPeriod: 29998
-#         filtersGranularityMetricIdClicksPeriod: 5019083
-#     ]
-# }
 NEW_TABLE_API = "https://hq1.appsflyer.com/platform/dashboard?widget=platform-table:0"
 NEW_TABLE_API_REFERER = "https://hq1.appsflyer.com/unified-ltv/dashboard"
 NEW_TABLE_API_PARAM = {

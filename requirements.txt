@@ -1,0 +1,4 @@
+requests
+playwright
+mysql-connector-python
+python-dotenv
