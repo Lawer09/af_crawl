@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from model.user import UserDAO
 from model.user_app import UserAppDAO
+from model.user_app_data import UserAppDataDAO
 from model.crawl_task import CrawlTaskDAO
 from services.data_service import fetch_and_save_table_data
 from config.settings import CRAWLER
@@ -27,7 +28,6 @@ def _daterange(days: int):
 def _worker(param):
     task_id, user, app_id, start_date, end_date = param
     try:
-        print(user, app_id, start_date, end_date)
         rows = fetch_and_save_table_data(user, app_id, start_date, end_date)
         logger.info("sync data ok -> %s %s [%s,%s] rows=%d", user["email"], app_id, start_date, end_date, len(rows))
         CrawlTaskDAO.mark_done(task_id)
@@ -44,10 +44,35 @@ def run(days: int = 1):
     # 若无 pending 任务则初始化
     if not CrawlTaskDAO.fetch_pending('app_data', 1):
         users = UserDAO.get_enabled_users()
+        activity = UserAppDataDAO.get_recent_activity(7)
+        last_dates = UserAppDataDAO.get_last_data_date()
+
         init_tasks = []
         for user in users:
             apps = UserAppDAO.get_user_apps(user["email"])
-            for app in apps:
+            # 计算活跃度，过滤 <=0
+            def score(app):
+                key = (user['email'], app['app_id'])
+                act = activity.get(key, None)
+                if act is None:
+                    # 从未抓取过
+                    return 10
+                # 活跃度值
+                return act
+
+            apps_sorted = sorted(apps, key=score, reverse=True)
+            for app in apps_sorted:
+                key = (user['email'], app['app_id'])
+                act = activity.get(key, None)
+
+                if act is None:
+                    pass  # 首次采集
+                else:
+                    if act <= 0:
+                        # 不活跃，但若最后一次数据在3天前也跳过
+                        last = last_dates.get(key)
+                        if last and (date.today() - date.fromisoformat(last)).days < 3:
+                            continue
                 for start_date, end_date in _daterange(days):
                     init_tasks.append({
                         'task_type': 'app_data',

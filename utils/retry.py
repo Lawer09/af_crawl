@@ -12,7 +12,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 # 需要重试的 HTTP 状态码
-_RETRY_STATUS = {202, 429, 403}
+_FAST_RETRY_STATUS = {202}
+_NORMAL_RETRY_STATUS = {429, 403}
 
 
 def _backoff(base: int, attempt: int) -> int:
@@ -42,15 +43,35 @@ def request_with_retry(
         kwargs      其余 requests.request 参数
     """
 
-    retry_set = retry_status or _RETRY_STATUS
+    retry_set = retry_status or (_FAST_RETRY_STATUS | _NORMAL_RETRY_STATUS)
+
+    fast_count = 0  # fast polling counter for 202
 
     for attempt in range(max_retry + 1):
-        # 人类化随机延时 1~3 秒
-        time.sleep(random.uniform(1, 3))
+        # 人类化随机延时
+        time.sleep(random.uniform(2, 8))
+
+        # ------- 确保带上 X-Username -------
+        base_headers = session.headers.copy()
+        req_headers = kwargs.pop("headers", {}) or {}
+        if "x-username" in base_headers:
+            if "x-username" not in req_headers and "X-Username" not in req_headers:
+                # propagate both forms
+                req_headers["x-username"] = base_headers["x-username"]
+                req_headers["X-Username"] = base_headers["x-username"]
+        kwargs["headers"] = req_headers
 
         resp = session.request(method, url, **kwargs)
         if resp.status_code not in retry_set:
             return resp  # 成功（或其它错误交由上层处理）
+
+        # ---------- 202 快速轮询 ----------
+        if resp.status_code in _FAST_RETRY_STATUS and fast_count < 1:
+            fast_wait = 2 ** fast_count  # 2s,4s,8s
+            fast_count += 1
+            logger.debug("202 polling %ss (%s/3) url=%s", fast_wait, fast_count, url)
+            time.sleep(fast_wait)
+            continue
 
         # 需要重试
         delay = _backoff(base_delay, attempt)

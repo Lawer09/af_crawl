@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def get_session(username: str, password: str) -> Tuple[Session, dict | None]:
     """返回 (session, proxies)；proxies 可直接传给 requests"""
     # 1. 拿到代理（绑定用户名）
-    proxy_url = proxy_pool.get_proxy(username) if USE_PROXY else ""
+    proxy_url = proxy_pool.get_proxy(username) if USE_PROXY else None
     proxies = ProxyPool.build_requests_proxy(proxy_url)
 
     # 2. 拿到 requests.Session（已包含 Cookie & UA）

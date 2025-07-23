@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App数据同步系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background-color: #f8f9fa;
+        }
+        .content {
+            padding: 20px;
+        }
+        .user-card {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .user-card:hover {
+            background-color: #e9ecef;
+        }
+        .app-checkbox {
+            margin-right: 10px;
+        }
+        .loading {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <div class="col-md-3 sidebar p-3">
+                <h4>用户列表</h4>
+                <div id="userList" class="list-group">
+                    <!-- 动态加载用户列表 -->
+                </div>
+                
+                <hr>
+                
+                <h5>任务列表</h5>
+                <div id="taskList" class="list-group">
+                    <!-- 动态加载任务列表 -->
+                </div>
+                
+                <button class="btn btn-primary mt-3" onclick="runTasks()">
+                    <i class="bi bi-play-fill"></i> 执行任务
+                </button>
+            </div>
+            
+            <!-- 主内容区 -->
+            <div class="col-md-9 content">
+                <h2>App管理</h2>
+                <div id="selectedUser" class="mb-3">
+                    <span class="text-muted">请先选择用户</span>
+                </div>
+                
+                <div id="appList" class="mb-3">
+                    <!-- 动态加载APP列表 -->
+                </div>
+                
+                <div id="syncPanel" style="display: none;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>同步数据</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">开始日期</label>
+                                    <input type="date" class="form-control" id="startDate">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">结束日期</label>
+                                    <input type="date" class="form-control" id="endDate">
+                                </div>
+                            </div>
+                            <button class="btn btn-success mt-3" onclick="createSyncTask()">
+                                <i class="bi bi-cloud-download"></i> 开始同步
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="dataList" class="mt-4">
+                    <!-- APP数据展示 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentUser = null;
+        let selectedApps = [];
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUsers();
+            loadTasks();
+            
+            // 设置默认日期
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            document.getElementById('startDate').value = yesterday.toISOString().split('T')[0];
+            document.getElementById('endDate').value = yesterday.toISOString().split('T')[0];
+        });
+
+        // 加载用户列表
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users');
+                const users = await response.json();
+                
+                const userList = document.getElementById('userList');
+                userList.innerHTML = users.map(user => `
+                    <div class="list-group-item user-card" onclick="selectUser('${user.email}')">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">${user.email}</h6>
+                            <small class="text-muted">${user.account_type}</small>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('加载用户失败:', error);
+            }
+        }
+
+        // 选择用户
+        async function selectUser(username) {
+            currentUser = username;
+            selectedApps = [];
+            
+            document.getElementById('selectedUser').innerHTML = `
+                <h4>用户: ${username}</h4>
+            `;
+            
+            await loadUserApps(username);
+            document.getElementById('syncPanel').style.display = 'none';
+            document.getElementById('dataList').innerHTML = '';
+        }
+
+        // 加载用户APP列表
+        async function loadUserApps(username) {
+            try {
+                const response = await fetch(`/api/users/${username}/apps`);
+                const apps = await response.json();
+                
+                const appList = document.getElementById('appList');
+                appList.innerHTML = `
+                    <h4>APP列表</h4>
+                    <div class="list-group">
+                        ${apps.map(app => `
+                            <label class="list-group-item">
+                                <input class="form-check-input app-checkbox" type="checkbox" 
+                                       value="${app.app_id}" onchange="toggleAppSelection('${app.app_id}')">
+                                <div class="ms-3">
+                                    <h6 class="mb-1">${app.app_name || app.app_id}</h6>
+                                    <small class="text-muted">平台: ${app.platform} | 时区: ${app.timezone}</small>
+                                </div>
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('加载APP失败:', error);
+            }
+        }
+
+        // 切换APP选择
+        function toggleAppSelection(appId) {
+            const checkbox = document.querySelector(`input[value="${appId}"]`);
+            if (checkbox.checked) {
+                if (!selectedApps.includes(appId)) {
+                    selectedApps.push(appId);
+                }
+            } else {
+                selectedApps = selectedApps.filter(id => id !== appId);
+            }
+            
+            document.getElementById('syncPanel').style.display = selectedApps.length > 0 ? 'block' : 'none';
+        }
+
+        // 创建同步任务
+        async function createSyncTask() {
+            if (selectedApps.length === 0) {
+                alert('请选择至少一个APP');
+                return;
+            }
+
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate || !endDate) {
+                alert('请选择日期范围');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/sync-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: currentUser,
+                        app_ids: selectedApps,
+                        start_date: startDate,
+                        end_date: endDate
+                    })
+                });
+
+                const result = await response.json();
+                alert(result.message);
+                
+                // 重置选择
+                selectedApps = [];
+                document.querySelectorAll('.app-checkbox').forEach(cb => cb.checked = false);
+                document.getElementById('syncPanel').style.display = 'none';
+                
+                // 重新加载任务列表
+                loadTasks();
+            } catch (error) {
+                console.error('创建任务失败:', error);
+                alert('创建任务失败');
+            }
+        }
+
+        // 加载任务列表
+        async function loadTasks() {
+            try {
+                const response = await fetch('/api/tasks');
+                const tasks = await response.json();
+                
+                const taskList = document.getElementById('taskList');
+                taskList.innerHTML = tasks.slice(0, 10).map(task => `
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <small>${task.username}</small>
+                            <span class="badge bg-${task.status === 'pending' ? 'warning' : task.status === 'running' ? 'info' : task.status === 'done' ? 'success' : 'danger'}">${task.status}</span>
+                        </div>
+                        <small class="text-muted">${task.app_id}</small>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('加载任务失败:', error);
+            }
+        }
+
+        // 运行任务
+        async function runTasks() {
+            if (confirm('确定要立即执行任务吗？')) {
+                try {
+                    const response = await fetch('/api/tasks/run', {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    alert(result.message);
+                    loadTasks();
+                } catch (error) {
+                    console.error('执行任务失败:', error);
+                    alert('执行任务失败');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -10,7 +10,6 @@ from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
-
 def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date: str):
     username = user["email"]
     password = user["password"]
@@ -27,7 +26,7 @@ def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date
     payload = cfg.NEW_TABLE_API_PARAM.copy()
     payload["dates"] = {"start": start_date, "end": end_date}
     payload["filters"]["app-id"] = [app_id]
-    payload["groupings"] = ["adset", "filter_data"]
+    # 保留 cfg 里的 groupings 结构（对象形式），仅在需要时可动态修改
 
     resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
     resp.raise_for_status()

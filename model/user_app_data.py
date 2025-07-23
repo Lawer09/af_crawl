@@ -50,4 +50,24 @@ class UserAppDataDAO:
             )
             for d in datas
         ]
-        mysql_pool.executemany(sql, params) 
+        mysql_pool.executemany(sql, params)
+
+    # -------- 活跃度 ---------
+    @classmethod
+    def get_recent_activity(cls, days: int = 7) -> Dict[tuple, int]:
+        """返回 {(username, app_id): installs_sum} 最近 N 天安装量"""
+        sql = f"""
+        SELECT username, app_id, SUM(af_installs) AS s
+        FROM {cls.TABLE}
+        WHERE end_date >= CURDATE() - INTERVAL %s DAY
+        GROUP BY username, app_id
+        """
+        rows = mysql_pool.select(sql, (days,))
+        return {(r['username'], r['app_id']): r['s'] for r in rows}
+
+    @classmethod
+    def get_last_data_date(cls) -> Dict[tuple, str]:
+        """返回 {(username, app_id): max_end_date_str} 用于判断长期无数据的应用"""
+        sql = f"SELECT username, app_id, MAX(end_date) AS d FROM {cls.TABLE} GROUP BY username, app_id"
+        rows = mysql_pool.select(sql)
+        return {(r['username'], r['app_id']): str(r['d']) for r in rows if r['d']} 

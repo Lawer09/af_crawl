@@ -35,12 +35,12 @@ class SessionManager:
         user_agent: Optional[str] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
         proxies: Optional[dict] = None,
     ) -> requests.Session:
+
         # 1. DB 查已有 cookie
         record = cookie_model.get_cookie_by_username(username)
         if record and not self._is_expired(record["expired_at"]):
-            logger.debug("cookie hit -> %s", username)
-            return self._build_requests_session(record["cookies"], user_agent or record.get("user_agent"))
-
+            logger.info("cookie hit -> %s", username)
+            return self._build_requests_session(record["cookies"], user_agent or record.get("user_agent"),username)
         # --- 登录重试 ---
         for attempt in range(3):
             try:
@@ -70,8 +70,7 @@ class SessionManager:
         return sess
 
     # ------------------ inner ------------------
-    @staticmethod
-    def _is_expired(expired_at: datetime) -> bool:
+    def _is_expired(self, expired_at: datetime) -> bool:
         return expired_at <= datetime.now()
 
     def _build_requests_session(self, cookies: list, user_agent: str | None, username: str | None = None) -> requests.Session:
@@ -81,8 +80,7 @@ class SessionManager:
         if user_agent:
             s.headers.update({"User-Agent": user_agent})
         if username:
-            # 便于后续 hook 获取用户名
-            s.headers.update({"X-Username": username})
+            s.headers.update({"x-username": username, "X-Username": username})
 
         # 挂载响应钩子检查 token 是否过期
         s.hooks.setdefault('response', []).append(self._check_token)
@@ -90,9 +88,11 @@ class SessionManager:
 
     # ------------------ token 检测 ------------------
     def _check_token(self, resp: requests.Response, *args, **kwargs):
-        if resp.status_code in (401, 403) and 'aws-waf-token' in resp.text.lower():
-            username = resp.request.headers.get('X-Username')
+
+        if resp.status_code in (401, 403):
+            username = resp.request.headers.get('x-username') or resp.request.headers.get('X-Username')
             if not username:
+                logger.warning("no username in request headers")
                 return resp
 
             pwd_tuple = self._pwd_cache.get(username)
@@ -146,8 +146,6 @@ class SessionManager:
             page.goto(AF_LOGIN_URL, timeout=PLAYWRIGHT["timeout"])
             base_cookies = ctx.cookies()
             
-            # print(base_cookies)
-
             import config.af_config as cfg, requests
 
             s = requests.Session()
@@ -162,6 +160,7 @@ class SessionManager:
                 "Accept": "application/json, text/plain, */*",
                 "Content-Type": "application/json",
             }
+            headers["x-username"] = username
             waf_token = next((c["value"] for c in base_cookies if c["name"] == "aws-waf-token"), "")
             if waf_token:
                 headers["X-XSRF-TOKEN"] = waf_token
@@ -185,9 +184,8 @@ class SessionManager:
                         "secure": True,
                     })
 
-            expired_at = datetime.now() + timedelta(days=1)
+            expired_at = datetime.now() + timedelta(minutes=15)
             logger.info("login success(api) -> %s", username)
-            # print("final_cookies", final_cookies)
             return final_cookies, expired_at, ua
         finally:
             try:
