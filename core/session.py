@@ -125,6 +125,7 @@ class SessionManager:
     ) -> tuple[list, datetime, str]:
         # 增加重试间隔
         import time
+        import random
         time.sleep(random.randint(5, 15))  # 随机延迟
         
         proxy_url = None
