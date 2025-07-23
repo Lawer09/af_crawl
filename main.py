@@ -9,6 +9,7 @@ import argparse
 import logging
 
 from core.logger import setup_logging  # noqa
+from config.settings import USE_PROXY, CRAWLER
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,23 @@ def _parse_args():
     return parser.parse_args()
 
 
+def _print_startup_info():
+    """打印启动配置信息"""
+    logger.info("=" * 50)
+    logger.info("启动配置信息:")
+    logger.info("代理状态: %s", "开启" if USE_PROXY else "关闭")
+    logger.info("进程数: %d", CRAWLER["processes"])
+    logger.info("每进程线程数: %d", CRAWLER["threads_per_process"])
+    logger.info("最大重试次数: %d", CRAWLER["max_retry"])
+    logger.info("重试延迟: %d秒", CRAWLER["retry_delay_seconds"])
+    logger.info("=" * 50)
+
+
 if __name__ == "__main__":
     args = _parse_args()
+
+    # 打印启动信息
+    _print_startup_info()
 
     if args.command == "sync_apps":
         from tasks.sync_user_apps import run as sync_apps_run
