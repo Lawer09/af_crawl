@@ -21,6 +21,9 @@ MYSQL = {
     'pool_size': int(os.getenv('MYSQL_POOL_SIZE', '10')),
 }
 
+# 是否使用代理
+USE_PROXY = os.getenv('USE_PROXY', 'false').lower() == 'true'
+
 # 代理池配置
 # 代理健康检查配置
 PROXY = {
