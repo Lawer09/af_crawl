@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""按用户分组的多线程数据同步"""
+"""按用户分组的多线程数据同步 - 修复版"""
 
 import logging
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import time
 import random
 from concurrent.futures import ThreadPoolExecutor
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _daterange(days: int):
-    """生成日期范围"""
+    """生成日期范围，返回字符串格式"""
     today = date.today()
     for i in range(days):
         d = today - timedelta(days=i + 1)
@@ -48,7 +48,12 @@ def _sync_user_apps(user_data: Dict) -> None:
         end_date = task['end_date']
         
         try:
-            # 这里可以复用同一个用户的session
+            # 确保日期参数是字符串格式
+            if isinstance(start_date, date):
+                start_date = start_date.isoformat()
+            if isinstance(end_date, date):
+                end_date = end_date.isoformat()
+                
             rows = fetch_and_save_table_data(
                 {'email': username, 'password': password}, 
                 app_id, start_date, end_date
@@ -69,15 +74,7 @@ def _sync_user_apps(user_data: Dict) -> None:
 
 
 def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
-    """
-    将任务按用户分组
-    
-    Args:
-        pending_tasks: 待处理的任务列表
-    
-    Returns:
-        按用户分组的任务列表
-    """
+    """将任务按用户分组"""
     user_groups = {}
     
     for task in pending_tasks:
@@ -93,30 +90,42 @@ def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
 
 
 def run(days: int = 1):
-    """按用户分组的多线程数据同步"""
+    """按用户分组的多线程数据同步 - 先获取所有用户再分配任务"""
     CrawlTaskDAO.init_table()
 
-    # 限制单次处理任务数量
-    max_batch_size = 100
+    # 获取所有启用用户
+    users = UserDAO.get_enabled_users()
+    if not users:
+        logger.info("没有启用的用户")
+        return
+
+    # 获取用户密码映射
+    user_passwords = {}
+    for user in users:
+        user_passwords[user['email']] = user['password']
+
+    # 获取待处理任务或初始化新任务
+    pending = CrawlTaskDAO.fetch_pending('app_data', limit=1000)
     
-    # 若无 pending 任务则初始化
-    if not CrawlTaskDAO.fetch_pending('app_data', 1):
-        users = UserDAO.get_enabled_users()
+    if not pending:
+        # 初始化所有用户的任务
+        logger.info("初始化所有用户的任务，用户数: %d", len(users))
         activity = UserAppDataDAO.get_recent_activity(7)
         last_dates = UserAppDataDAO.get_last_data_date()
 
         init_tasks = []
         for user in users:
-            apps = UserAppDAO.get_user_apps(user["email"])
+            username = user['email']
+            apps = UserAppDAO.get_user_apps(username)
             
             def score(app):
-                key = (user['email'], app['app_id'])
+                key = (username, app['app_id'])
                 act = activity.get(key, None)
                 return act if act is not None else 10
 
             apps_sorted = sorted(apps, key=score, reverse=True)
             for app in apps_sorted:
-                key = (user['email'], app['app_id'])
+                key = (username, app['app_id'])
                 act = activity.get(key, None)
 
                 if act is not None and act <= 0:
@@ -124,22 +133,21 @@ def run(days: int = 1):
                     if last and (date.today() - date.fromisoformat(last)).days < 3:
                         continue
                 
-                for start_date, end_date in _daterange(days):
+                for start_date_str, end_date_str in _daterange(days):
                     init_tasks.append({
                         'task_type': 'app_data',
-                        'username': user['email'],
+                        'username': username,
                         'app_id': app['app_id'],
-                        'start_date': start_date,
-                        'end_date': end_date,
+                        'start_date': start_date_str,
+                        'end_date': end_date_str,
                         'next_run_at': date.today().isoformat(),
                     })
         
-        CrawlTaskDAO.add_tasks(init_tasks)
+        if init_tasks:
+            CrawlTaskDAO.add_tasks(init_tasks)
+            pending = CrawlTaskDAO.fetch_pending('app_data', limit=1000)
 
-    # 获取待处理任务
-    pending = CrawlTaskDAO.fetch_pending('app_data', limit=max_batch_size)
     logger.info("待处理任务数: %d", len(pending))
-
     if not pending:
         logger.info("没有待处理的任务")
         return
@@ -148,21 +156,16 @@ def run(days: int = 1):
     user_groups = _group_tasks_by_user(pending)
     logger.info("待处理用户数: %d", len(user_groups))
 
-    # 获取用户密码信息
-    usernames = [group['username'] for group in user_groups]
-    users_map = UserDAO.get_users_by_emails(usernames)
-    
-    # 补充密码信息
+    # 补充密码信息并过滤无效用户
+    valid_user_groups = []
     for group in user_groups:
         username = group['username']
-        if username in users_map:
-            group['password'] = users_map[username]['password']
+        if username in user_passwords:
+            group['password'] = user_passwords[username]
+            valid_user_groups.append(group)
         else:
             logger.warning("用户不存在: %s", username)
 
-    # 过滤掉无效用户
-    valid_user_groups = [g for g in user_groups if 'password' in g]
-    
     if not valid_user_groups:
         logger.warning("没有有效的用户任务")
         return
@@ -177,7 +180,7 @@ def run(days: int = 1):
         # 等待所有任务完成
         for future in futures:
             try:
-                future.result(timeout=3600)  # 1小时超时
+                future.result(timeout=3600)
             except Exception as e:
                 logger.error("用户处理失败: %s", e)
     
