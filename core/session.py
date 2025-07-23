@@ -123,7 +123,10 @@ class SessionManager:
         user_agent: Optional[str],
         proxies: Optional[dict] = None,
     ) -> tuple[list, datetime, str]:
-        # --- 每次独立浏览器 ---
+        # 增加重试间隔
+        import time
+        time.sleep(random.randint(5, 15))  # 随机延迟
+        
         proxy_url = None
         if proxies:
             proxy_url = proxies.get("http") or proxies.get("https")
@@ -132,18 +135,39 @@ class SessionManager:
         launch_kwargs = {
             "headless": PLAYWRIGHT["headless"],
             "slow_mo": PLAYWRIGHT["slow_mo"],
+            "timeout": PLAYWRIGHT["timeout"],
         }
+        
         if proxy_url:
             launch_kwargs["proxy"] = {"server": proxy_url}
+            
         browser = pw.chromium.launch(**launch_kwargs)
         try:
-            context_args = {}
-            if user_agent:
-                context_args["user_agent"] = user_agent
+            context_args = {
+                "viewport": {"width": 1920, "height": 1080},
+                "user_agent": user_agent,
+                # 添加更多浏览器指纹
+                "locale": "en-US",
+                "timezone_id": "Asia/Singapore",
+            }
             ctx = browser.new_context(**context_args)
             page = ctx.new_page()
-
-            page.goto(AF_LOGIN_URL, timeout=PLAYWRIGHT["timeout"])
+            
+            # 增加页面加载超时和重试
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    page.goto(AF_LOGIN_URL, timeout=PLAYWRIGHT["timeout"], wait_until='networkidle')
+                    break
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        raise e
+                    logger.warning(f"Page load failed, retrying {attempt + 1}/{max_retries}")
+                    time.sleep(10 * (attempt + 1))
+            
+            # 等待页面完全加载
+            page.wait_for_load_state('networkidle', timeout=30000)
+            
             base_cookies = ctx.cookies()
             
             import config.af_config as cfg, requests
@@ -203,4 +227,4 @@ class SessionManager:
 
 
 # 单例
-session_manager = SessionManager() 
+session_manager = SessionManager()

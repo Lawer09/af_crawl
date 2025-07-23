@@ -22,32 +22,34 @@ MYSQL = {
 }
 
 # 代理池配置
+# 代理健康检查配置
 PROXY = {
     'ipweb_token': os.getenv('IPWEB_TOKEN', ''),
     'default_country': os.getenv('PROXY_COUNTRY', 'SG'),
     'default_times': int(os.getenv('PROXY_TIMES', '15')),
-    'default_count': int(os.getenv('PROXY_COUNT', '5')),
+    'default_count': int(os.getenv('PROXY_COUNT', '3')),  # 减少代理数量
+    'timeout': int(os.getenv('PROXY_TIMEOUT', '30')),
+    'max_failures': int(os.getenv('PROXY_MAX_FAILURES', '3')),
 }
 
 # Playwright 相关
+# 增加超时时间
 PLAYWRIGHT = {
     'headless': os.getenv('PW_HEADLESS', 'true').lower() == 'true',
-    'slow_mo': int(os.getenv('PW_SLOWMO', '0')),
-    'timeout': int(os.getenv('PW_TIMEOUT', '60000')),
+    'slow_mo': int(os.getenv('PW_SLOWMO', '1000')),  # 增加延迟
+    'timeout': int(os.getenv('PW_TIMEOUT', '180000')),  # 增加到3分钟
 }
 
-# 是否使用代理，影响并发与 Session 逻辑
-USE_PROXY = os.getenv('USE_PROXY', 'true').lower() == 'true'
-
-_proc_default = int(os.getenv('CRAWLER_PROCESSES', '4')) if USE_PROXY else 1
-_thread_default = int(os.getenv('CRAWLER_THREADS', '5')) if USE_PROXY else 1
+# 降低并发数量
+_proc_default = int(os.getenv('CRAWLER_PROCESSES', '2')) if USE_PROXY else 1
+_thread_default = int(os.getenv('CRAWLER_THREADS', '2')) if USE_PROXY else 1
 
 CRAWLER = {
     'processes': _proc_default,
     'threads_per_process': _thread_default,
-    'max_retry': int(os.getenv('CRAWLER_MAX_RETRY', '3')),
-    'retry_delay_seconds': int(os.getenv('CRAWLER_RETRY_DELAY', '600')),  # 10 分钟
+    'max_retry': int(os.getenv('CRAWLER_MAX_RETRY', '5')),  # 增加重试次数
+    'retry_delay_seconds': int(os.getenv('CRAWLER_RETRY_DELAY', '900')),  # 增加到15分钟
 }
 
 # 其他常量
-aWS_WAF_TOKEN_NAME = 'aws-waf-token' 
+aWS_WAF_TOKEN_NAME = 'aws-waf-token'

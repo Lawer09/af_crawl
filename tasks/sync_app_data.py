@@ -41,6 +41,9 @@ def _worker(param):
 def run(days: int = 1):
     CrawlTaskDAO.init_table()
 
+    # 限制单次处理任务数量
+    max_batch_size = 50  # 减少批次大小
+    
     # 若无 pending 任务则初始化
     if not CrawlTaskDAO.fetch_pending('app_data', 1):
         users = UserDAO.get_enabled_users()
@@ -84,8 +87,8 @@ def run(days: int = 1):
                     })
         CrawlTaskDAO.add_tasks(init_tasks)
 
-    pending = CrawlTaskDAO.fetch_pending('app_data', limit=500)
-    logger.info("pending tasks=%d", len(pending))
+    pending = CrawlTaskDAO.fetch_pending('app_data', limit=max_batch_size)
+    logger.info("pending tasks=%d (limited to %d)", len(pending), max_batch_size)
 
     # 将任务转为参数列表
     usernames = [t['username'] for t in pending]
@@ -96,15 +99,28 @@ def run(days: int = 1):
         for t in pending if t['username'] in users_map
     ]
 
-    with ThreadPoolExecutor(max_workers=CRAWLER["threads_per_process"]) as pool:
-        futures = [pool.submit(_worker, t) for t in tasks]
-        for fut in futures:
-            try:
-                fut.result(timeout=600)
-            except Exception as e:
-                logger.error("task timeout or error: %s", e)
+    # 使用更小的线程池和队列
+    with ThreadPoolExecutor(max_workers=min(2, CRAWLER["threads_per_process"])) as pool:
+        futures = []
+        # 分批提交任务，避免同时启动太多
+        batch_size = 2
+        for i in range(0, len(tasks), batch_size):
+            batch = tasks[i:i+batch_size]
+            batch_futures = [pool.submit(_worker, t) for t in batch]
+            
+            # 等待当前批次完成
+            for fut in batch_futures:
+                try:
+                    fut.result(timeout=900)  # 增加到15分钟
+                except Exception as e:
+                    logger.error("task timeout or error: %s", e)
+            
+            # 批次间延迟
+            if i + batch_size < len(tasks):
+                time.sleep(random.randint(30, 60))
+    
     logger.info("batch done")
 
 
 if __name__ == "__main__":
-    run() 
+    run()
