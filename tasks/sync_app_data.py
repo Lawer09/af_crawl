@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-"""按日期区间同步全部用户全部 App 的统计数据"""
+"""按用户分组的多线程数据同步"""
 
 import logging
 from datetime import date, timedelta
 import time
 import random
 from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Tuple
 
 from model.user import UserDAO
 from model.user_app import UserAppDAO
@@ -20,30 +21,83 @@ logger = logging.getLogger(__name__)
 
 
 def _daterange(days: int):
+    """生成日期范围"""
     today = date.today()
     for i in range(days):
-        d = today - timedelta(days=i + 1)  # 昨天、前天...
+        d = today - timedelta(days=i + 1)
         yield d.isoformat(), d.isoformat()
 
 
-def _worker(param):
-    task_id, user, app_id, start_date, end_date = param
-    try:
-        rows = fetch_and_save_table_data(user, app_id, start_date, end_date)
-        logger.info("sync data ok -> %s %s [%s,%s] rows=%d", user["email"], app_id, start_date, end_date, len(rows))
-        CrawlTaskDAO.mark_done(task_id)
-    except Exception as e:
-        logger.exception("sync data fail -> %s %s : %s", user["email"], app_id, e)
-        # 延迟任务
-        delay = 300 + random.randint(180, 360)
-        CrawlTaskDAO.fail_task(task_id, delay)
+def _sync_user_apps(user_data: Dict) -> None:
+    """
+    单个线程处理一个用户的所有APP数据
+    
+    Args:
+        user_data: 包含用户信息和任务列表的字典
+    """
+    username = user_data['username']
+    password = user_data['password']
+    tasks = user_data['tasks']
+    
+    logger.info("开始处理用户: %s, 任务数: %d", username, len(tasks))
+    
+    for task in tasks:
+        task_id = task['id']
+        app_id = task['app_id']
+        start_date = task['start_date']
+        end_date = task['end_date']
+        
+        try:
+            # 这里可以复用同一个用户的session
+            rows = fetch_and_save_table_data(
+                {'email': username, 'password': password}, 
+                app_id, start_date, end_date
+            )
+            logger.info("用户 %s 同步成功 -> %s [%s,%s] rows=%d", 
+                       username, app_id, start_date, end_date, len(rows))
+            CrawlTaskDAO.mark_done(task_id)
+            
+        except Exception as e:
+            logger.exception("用户 %s 同步失败 -> %s : %s", username, app_id, e)
+            # 延迟任务
+            delay = 300 + random.randint(180, 360)
+            CrawlTaskDAO.fail_task(task_id, delay)
+        
+        # 同一用户的任务间延迟
+        if len(tasks) > 1:
+            time.sleep(random.randint(5, 15))
+
+
+def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
+    """
+    将任务按用户分组
+    
+    Args:
+        pending_tasks: 待处理的任务列表
+    
+    Returns:
+        按用户分组的任务列表
+    """
+    user_groups = {}
+    
+    for task in pending_tasks:
+        username = task['username']
+        if username not in user_groups:
+            user_groups[username] = {
+                'username': username,
+                'tasks': []
+            }
+        user_groups[username]['tasks'].append(task)
+    
+    return list(user_groups.values())
 
 
 def run(days: int = 1):
+    """按用户分组的多线程数据同步"""
     CrawlTaskDAO.init_table()
 
     # 限制单次处理任务数量
-    max_batch_size = 50  # 减少批次大小
+    max_batch_size = 100
     
     # 若无 pending 任务则初始化
     if not CrawlTaskDAO.fetch_pending('app_data', 1):
@@ -54,29 +108,22 @@ def run(days: int = 1):
         init_tasks = []
         for user in users:
             apps = UserAppDAO.get_user_apps(user["email"])
-            # 计算活跃度，过滤 <=0
+            
             def score(app):
                 key = (user['email'], app['app_id'])
                 act = activity.get(key, None)
-                if act is None:
-                    # 从未抓取过
-                    return 10
-                # 活跃度值
-                return act
+                return act if act is not None else 10
 
             apps_sorted = sorted(apps, key=score, reverse=True)
             for app in apps_sorted:
                 key = (user['email'], app['app_id'])
                 act = activity.get(key, None)
 
-                if act is None:
-                    pass  # 首次采集
-                else:
-                    if act <= 0:
-                        # 不活跃，但若最后一次数据在3天前也跳过
-                        last = last_dates.get(key)
-                        if last and (date.today() - date.fromisoformat(last)).days < 3:
-                            continue
+                if act is not None and act <= 0:
+                    last = last_dates.get(key)
+                    if last and (date.today() - date.fromisoformat(last)).days < 3:
+                        continue
+                
                 for start_date, end_date in _daterange(days):
                     init_tasks.append({
                         'task_type': 'app_data',
@@ -86,41 +133,55 @@ def run(days: int = 1):
                         'end_date': end_date,
                         'next_run_at': date.today().isoformat(),
                     })
+        
         CrawlTaskDAO.add_tasks(init_tasks)
 
+    # 获取待处理任务
     pending = CrawlTaskDAO.fetch_pending('app_data', limit=max_batch_size)
-    logger.info("pending tasks=%d (limited to %d)", len(pending), max_batch_size)
+    logger.info("待处理任务数: %d", len(pending))
 
-    # 将任务转为参数列表
-    usernames = [t['username'] for t in pending]
+    if not pending:
+        logger.info("没有待处理的任务")
+        return
+
+    # 按用户分组任务
+    user_groups = _group_tasks_by_user(pending)
+    logger.info("待处理用户数: %d", len(user_groups))
+
+    # 获取用户密码信息
+    usernames = [group['username'] for group in user_groups]
     users_map = UserDAO.get_users_by_emails(usernames)
-
-    tasks = [
-        (t['id'], users_map[t['username']], t['app_id'], t['start_date'].isoformat(), t['end_date'].isoformat())
-        for t in pending if t['username'] in users_map
-    ]
-
-    # 使用更小的线程池和队列
-    with ThreadPoolExecutor(max_workers=min(2, CRAWLER["threads_per_process"])) as pool:
-        futures = []
-        # 分批提交任务，避免同时启动太多
-        batch_size = 2
-        for i in range(0, len(tasks), batch_size):
-            batch = tasks[i:i+batch_size]
-            batch_futures = [pool.submit(_worker, t) for t in batch]
-            
-            # 等待当前批次完成
-            for fut in batch_futures:
-                try:
-                    fut.result(timeout=900)  # 增加到15分钟
-                except Exception as e:
-                    logger.error("task timeout or error: %s", e)
-            
-            # 批次间延迟
-            if i + batch_size < len(tasks):
-                time.sleep(random.randint(30, 60))
     
-    logger.info("batch done")
+    # 补充密码信息
+    for group in user_groups:
+        username = group['username']
+        if username in users_map:
+            group['password'] = users_map[username]['password']
+        else:
+            logger.warning("用户不存在: %s", username)
+
+    # 过滤掉无效用户
+    valid_user_groups = [g for g in user_groups if 'password' in g]
+    
+    if not valid_user_groups:
+        logger.warning("没有有效的用户任务")
+        return
+
+    # 使用线程池，每个线程处理一个用户的所有任务
+    max_workers = min(len(valid_user_groups), CRAWLER["threads_per_process"])
+    logger.info("使用 %d 个线程处理 %d 个用户", max_workers, len(valid_user_groups))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_sync_user_apps, user_data) for user_data in valid_user_groups]
+        
+        # 等待所有任务完成
+        for future in futures:
+            try:
+                future.result(timeout=3600)  # 1小时超时
+            except Exception as e:
+                logger.error("用户处理失败: %s", e)
+    
+    logger.info("批次完成")
 
 
 if __name__ == "__main__":
