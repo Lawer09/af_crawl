@@ -67,7 +67,7 @@ def request_with_retry(
 
         # ---------- 202 快速轮询 ----------
         if resp.status_code in _FAST_RETRY_STATUS and fast_count < 1:
-            fast_wait = 2 ** fast_count  # 2s,4s,8s
+            fast_wait = 3 ** fast_count  # 2s,4s,8s
             fast_count += 1
             logger.debug("202 polling %ss (%s/3) url=%s", fast_wait, fast_count, url)
             time.sleep(fast_wait)
