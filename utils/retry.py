@@ -6,7 +6,7 @@ import logging
 import random
 import time
 from typing import Any, Dict, Optional
-
+from config.settings import CRAWLER
 import requests
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,8 @@ def request_with_retry(
     method: str,
     url: str,
     *,
-    max_retry: int = 5,
-    base_delay: int = 300,
+    max_retry: int = CRAWLER["max_retry"],
+    base_delay: int = CRAWLER["retry_delay_seconds"],
     retry_status: set[int] | None = None,
     **kwargs: Any,
 ) -> requests.Response:
