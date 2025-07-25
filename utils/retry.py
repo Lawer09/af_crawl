@@ -47,7 +47,7 @@ def request_with_retry(
 
     fast_count = 0  # fast polling counter for 202
 
-    for attempt in range(max_retry + 1):
+    for attempt in range(max_retry):
         # 人类化随机延时
         time.sleep(random.uniform(2, 8))
 
