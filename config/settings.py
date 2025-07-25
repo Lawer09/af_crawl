@@ -51,7 +51,7 @@ CRAWLER = {
     'processes': _proc_default,
     'threads_per_process': _thread_default,
     'max_retry': int(os.getenv('CRAWLER_MAX_RETRY', '5')),  # 增加重试次数
-    'retry_delay_seconds': int(os.getenv('CRAWLER_RETRY_DELAY', '900')),  # 增加到15分钟
+    'retry_delay_seconds': int(os.getenv('CRAWLER_RETRY_DELAY', '300')),  
 }
 
 # 其他常量

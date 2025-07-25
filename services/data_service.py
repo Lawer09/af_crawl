@@ -8,7 +8,6 @@ from services.login_service import get_session
 from model.user_app_data import UserAppDataDAO
 from utils.retry import request_with_retry
 
-
 logger = logging.getLogger(__name__)
 
 def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date: str):

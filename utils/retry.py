@@ -17,8 +17,8 @@ _NORMAL_RETRY_STATUS = {429, 403}
 
 
 def _backoff(base: int, attempt: int) -> int:
-    """基础 5 分钟 + 每次递增 3~6 分钟随机抖动"""
-    return base + attempt * random.randint(180, 360)
+    """基础分钟 + 每次递增 随机抖动"""
+    return base + attempt * random.randint(10, 30)
 
 
 def request_with_retry(
@@ -45,8 +45,6 @@ def request_with_retry(
 
     retry_set = retry_status or (_FAST_RETRY_STATUS | _NORMAL_RETRY_STATUS)
 
-    fast_count = 0  # fast polling counter for 202
-
     for attempt in range(max_retry):
         # 人类化随机延时
         time.sleep(random.uniform(2, 8))
@@ -64,14 +62,6 @@ def request_with_retry(
         resp = session.request(method, url, **kwargs)
         if resp.status_code not in retry_set:
             return resp  # 成功（或其它错误交由上层处理）
-
-        # ---------- 202 快速轮询 ----------
-        if resp.status_code in _FAST_RETRY_STATUS and fast_count < 1:
-            fast_wait = 3 ** fast_count  # 2s,4s,8s
-            fast_count += 1
-            logger.debug("202 polling %ss (%s/3) url=%s", fast_wait, fast_count, url)
-            time.sleep(fast_wait)
-            continue
 
         # 需要重试
         delay = _backoff(base_delay, attempt)

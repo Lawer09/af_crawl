@@ -110,29 +110,14 @@ def run(days: int = 1):
     if not pending:
         # 初始化所有用户的任务
         logger.info("初始化所有用户的任务，用户数: %d", len(users))
-        activity = UserAppDataDAO.get_recent_activity(7)
-        last_dates = UserAppDataDAO.get_last_data_date()
 
         init_tasks = []
         for user in users:
             username = user['email']
             apps = UserAppDAO.get_user_apps(username)
             
-            def score(app):
-                key = (username, app['app_id'])
-                act = activity.get(key, None)
-                return act if act is not None else 10
+            for app in apps:
 
-            apps_sorted = sorted(apps, key=score, reverse=True)
-            for app in apps_sorted:
-                key = (username, app['app_id'])
-                act = activity.get(key, None)
-
-                if act is not None and act <= 0:
-                    last = last_dates.get(key)
-                    if last and (date.today() - date.fromisoformat(last)).days < 3:
-                        continue
-                
                 for start_date_str, end_date_str in _daterange(days):
                     init_tasks.append({
                         'task_type': 'app_data',
