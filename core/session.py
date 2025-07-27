@@ -41,6 +41,8 @@ class SessionManager:
         record = cookie_model.get_cookie_by_username(username)
         if record and not self._is_expired(record["expired_at"]):
             logger.info("cookie hit -> %s", username)
+            # 缓存密码供后续刷新使用
+            self._pwd_cache[username] = (password, user_agent or record.get("user_agent"))
             return self._build_requests_session(record["cookies"], user_agent or record.get("user_agent"),username)
         # --- 登录重试 ---
         for attempt in range(2):
