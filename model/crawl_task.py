@@ -87,13 +87,15 @@ class CrawlTaskDAO:
     @classmethod
     def get_user_total_tasks(cls, username: str, task_type: str) -> int:
         sql = f"SELECT COUNT(*) as count FROM {cls.TABLE} WHERE username=%s AND task_type=%s"
-        result = mysql_pool.select_one(sql, (username, task_type))
+        results = mysql_pool.select(sql, (username, task_type))
+        result = results[0] if results else None
         return result['count'] if result else 0
 
     @classmethod
     def get_user_completed_tasks(cls, username: str, task_type: str) -> int:
         sql = f"SELECT COUNT(*) as count FROM {cls.TABLE} WHERE username=%s AND task_type=%s AND status='done'"
-        result = mysql_pool.select_one(sql, (username, task_type))
+        results = mysql_pool.select(sql, (username, task_type))
+        result = results[0] if results else None
         return result['count'] if result else 0
 
     @classmethod
