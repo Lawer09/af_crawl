@@ -126,8 +126,6 @@ class SessionManager:
         ) -> tuple[requests.Session, BrowserContext, dict, str]:
                 # 增加重试间隔
         import time
-        import random
-        time.sleep(random.randint(1, 3))  # 随机延迟
         
         proxy_url = None
         if proxies:

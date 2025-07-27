@@ -46,7 +46,6 @@ def request_with_retry(
     retry_set = retry_status or (_FAST_RETRY_STATUS | _NORMAL_RETRY_STATUS)
  
     for attempt in range(max_retry+1):
-        time.sleep(random.randint(1, 2))
         # ------- 确保带上 X-Username -------
         base_headers = session.headers.copy()
         req_headers = kwargs.pop("headers", {}) or {}
