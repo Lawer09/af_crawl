@@ -98,6 +98,7 @@ class SessionManager:
 
             pwd_tuple = self._pwd_cache.get(username)
             if not pwd_tuple:
+                logger.warning("no password in cache")
                 return resp
 
             password, ua = pwd_tuple
