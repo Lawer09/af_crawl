@@ -44,11 +44,9 @@ def request_with_retry(
     """
 
     retry_set = retry_status or (_FAST_RETRY_STATUS | _NORMAL_RETRY_STATUS)
-
-    for attempt in range(max_retry):
-        # 人类化随机延时
-        time.sleep(random.uniform(2, 5))
-
+ 
+    for attempt in range(max_retry+1):
+        time.sleep(random.randint(1, 2))
         # ------- 确保带上 X-Username -------
         base_headers = session.headers.copy()
         req_headers = kwargs.pop("headers", {}) or {}
@@ -75,4 +73,4 @@ def request_with_retry(
         )
         time.sleep(delay)
 
-    raise RuntimeError(f"请求 {url} 连续 {max_retry + 1} 次触发限流/排队") 
+    raise RuntimeError(f"请求 {url} 连续 {max_retry+1} 次触发限流/排队") 

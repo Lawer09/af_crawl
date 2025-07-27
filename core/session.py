@@ -52,7 +52,7 @@ class SessionManager:
                 logger.warning("login failed #%s -> %s", attempt+1, e)
                 if attempt == 2:
                     raise
-                time.sleep(60 * (attempt + 1))
+                time.sleep(30 * (attempt + 1))
 
         # 3. 写入 DB
         cookie_model.add_or_update_cookie(
@@ -127,7 +127,7 @@ class SessionManager:
                 # 增加重试间隔
         import time
         import random
-        time.sleep(random.randint(3, 10))  # 随机延迟
+        time.sleep(random.randint(1, 3))  # 随机延迟
         
         proxy_url = None
         if proxies:

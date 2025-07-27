@@ -70,7 +70,7 @@ def _sync_user_apps(user_data: Dict) -> None:
         
         # 同一用户的任务间延迟
         if len(tasks) > 1:
-            time.sleep(random.randint(2, 5))
+            time.sleep(random.randint(2, 4))
 
 
 def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
