@@ -44,8 +44,8 @@ PLAYWRIGHT = {
     'timeout': int(os.getenv('PW_TIMEOUT', '180000')),  # 增加到3分钟
 }
 
-_proc_default = int(os.getenv('CRAWLER_PROCESSES', '2')) if USE_PROXY else 1
-_thread_default = int(os.getenv('CRAWLER_THREADS', '2')) if USE_PROXY else 1
+_proc_default = int(os.getenv('CRAWLER_PROCESSES', '1'))
+_thread_default = int(os.getenv('CRAWLER_THREADS', '1'))
 
 CRAWLER = {
     'processes': _proc_default,
