@@ -38,12 +38,12 @@ PROXY = {
 # Playwright 相关
 # 增加超时时间
 PLAYWRIGHT = {
+    'user_agent': os.getenv('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'),
     'headless': os.getenv('PW_HEADLESS', 'true').lower() == 'true',
     'slow_mo': int(os.getenv('PW_SLOWMO', '1000')),  # 增加延迟
     'timeout': int(os.getenv('PW_TIMEOUT', '180000')),  # 增加到3分钟
 }
 
-# 降低并发数量
 _proc_default = int(os.getenv('CRAWLER_PROCESSES', '2')) if USE_PROXY else 1
 _thread_default = int(os.getenv('CRAWLER_THREADS', '2')) if USE_PROXY else 1
 

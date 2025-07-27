@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from this import d
 from typing import Optional, Dict
 
 import requests
@@ -32,7 +33,7 @@ class SessionManager:
         username: str,
         password: str,
         *,
-        user_agent: Optional[str] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        user_agent: Optional[str] = PLAYWRIGHT['user_agent'],
         proxies: Optional[dict] = None,
     ) -> requests.Session:
 
@@ -42,7 +43,7 @@ class SessionManager:
             logger.info("cookie hit -> %s", username)
             return self._build_requests_session(record["cookies"], user_agent or record.get("user_agent"),username)
         # --- 登录重试 ---
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt+1)
                 cookies, expired_at, ua = self._login_by_playwright(username, password, user_agent, proxies)
@@ -89,7 +90,7 @@ class SessionManager:
     # ------------------ token 检测 ------------------
     def _check_token(self, resp: requests.Response, *args, **kwargs):
 
-        if resp.status_code in (401, 403):
+        if resp.status_code in (401, 403, 202):
             username = resp.request.headers.get('x-username') or resp.request.headers.get('X-Username')
             if not username:
                 logger.warning("no username in request headers")
@@ -102,7 +103,7 @@ class SessionManager:
             password, ua = pwd_tuple
             logger.info("aws_waf_token 失效，尝试自动刷新 -> %s", username)
             try:
-                cookies, expired_at, ua_new = self._login_by_playwright(username, password, ua)
+                cookies, expired_at, ua_new = self._login_by_playwright(username, password, ua, )
                 # 更新 DB
                 cookie_model.add_or_update_cookie(username=username, password=password, cookies=cookies,
                                                  expired_at=expired_at, user_agent=ua_new)
@@ -112,21 +113,21 @@ class SessionManager:
                     resp.request._cookies.set(c['name'], c['value'], domain=c.get('domain'), path=c.get('path'))
             except Exception as e:
                 logger.exception("自动刷新失败 -> %s", e)
+
         return resp
 
     # ------------------ playwright ------------------
-    # 过去的全局浏览器不再使用
-    def _login_by_playwright(
+    # 获取 af 界面浏览器session信息
+    def _get_bw_session_by_playwright(
         self,
         username: str,
-        password: str,
         user_agent: Optional[str],
         proxies: Optional[dict] = None,
-    ) -> tuple[list, datetime, str]:
-        # 增加重试间隔
+        ) -> tuple[requests.Session, BrowserContext, dict]:
+                # 增加重试间隔
         import time
         import random
-        time.sleep(random.randint(5, 15))  # 随机延迟
+        time.sleep(random.randint(3, 10))  # 随机延迟
         
         proxy_url = None
         if proxies:
@@ -147,7 +148,6 @@ class SessionManager:
             context_args = {
                 "viewport": {"width": 1920, "height": 1080},
                 "user_agent": user_agent,
-                # 添加更多浏览器指纹
                 "locale": "en-US",
                 "timezone_id": "Asia/Singapore",
             }
@@ -192,26 +192,7 @@ class SessionManager:
 
             if proxies:
                 s.proxies.update(proxies)
-
-            payload = {"username": username, "password": password, "keep-user-logged-in": False}
-            r = s.post(cfg.LOGIN_API, json=payload, headers=headers, timeout=30)
-            r.raise_for_status()
-
-            final_cookies = ctx.cookies()
-            for name in ["af_jwt", "auth_tkt"]:
-                if name in s.cookies:
-                    final_cookies.append({
-                        "name": name,
-                        "value": s.cookies.get(name),
-                        "domain": ".appsflyer.com",
-                        "path": "/",
-                        "httpOnly": True,
-                        "secure": True,
-                    })
-
-            expired_at = datetime.now() + timedelta(minutes=15)
-            logger.info("login success(api) -> %s", username)
-            return final_cookies, expired_at, ua
+            return s, ctx, headers
         finally:
             try:
                 browser.close()
@@ -219,13 +200,46 @@ class SessionManager:
                 pass
             pw.stop()
 
+    # 过去的全局浏览器不再使用
+    def _login_by_playwright(
+        self,
+        username: str,
+        password: str,
+        user_agent: Optional[str],
+        proxies: Optional[dict] = None,
+    ) -> tuple[list, datetime, str]:
+
+        import config.af_config as cfg
+
+        s, ctx, headers = self._get_bw_session_by_playwright(
+            username,
+            user_agent, 
+            proxies)
+
+        payload = {"username": username, "password": password, "keep-user-logged-in": False}
+        r = s.post(cfg.LOGIN_API, json=payload, headers=headers, timeout=30)
+        r.raise_for_status()
+        final_cookies = ctx.cookies()
+        for name in ["af_jwt", "auth_tkt"]:
+            if name in s.cookies:
+                final_cookies.append({
+                    "name": name,
+                    "value": s.cookies.get(name),
+                    "domain": ".appsflyer.com",
+                    "path": "/",
+                    "httpOnly": True,
+                    "secure": True,
+                })
+        expired_at = datetime.now() + timedelta(minutes=15)
+        logger.info("login success(api) -> %s", username)
+        return final_cookies, expired_at, ua
+
     # ------------------ graceful shutdown ------------------
     def close(self):
         if self._browser:
             self._browser.close()
         if self._playwright:
             self._playwright.stop()
-
 
 # 单例
 session_manager = SessionManager()

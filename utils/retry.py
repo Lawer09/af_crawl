@@ -18,7 +18,7 @@ _NORMAL_RETRY_STATUS = {429, 403}
 
 def _backoff(base: int, attempt: int) -> int:
     """基础分钟 + 每次递增 随机抖动"""
-    return base + attempt * random.randint(10, 30)
+    return base + attempt * random.randint(1, 3)
 
 
 def request_with_retry(
@@ -47,7 +47,7 @@ def request_with_retry(
 
     for attempt in range(max_retry):
         # 人类化随机延时
-        time.sleep(random.uniform(2, 8))
+        time.sleep(random.uniform(2, 5))
 
         # ------- 确保带上 X-Username -------
         base_headers = session.headers.copy()

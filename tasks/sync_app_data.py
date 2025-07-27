@@ -70,7 +70,7 @@ def _sync_user_apps(user_data: Dict) -> None:
         
         # 同一用户的任务间延迟
         if len(tasks) > 1:
-            time.sleep(random.randint(5, 15))
+            time.sleep(random.randint(2, 5))
 
 
 def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
@@ -90,7 +90,7 @@ def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
 
 
 def run(days: int = 1):
-    """按用户分组的多线程数据同步 - 先获取所有用户再分配任务"""
+    """多线程用户任务分配 - 按线程数均衡分配用户任务"""
     CrawlTaskDAO.init_table()
 
     # 获取所有启用用户
@@ -100,24 +100,20 @@ def run(days: int = 1):
         return
 
     # 获取用户密码映射
-    user_passwords = {}
-    for user in users:
-        user_passwords[user['email']] = user['password']
+    user_passwords = {user['email']: user['password'] for user in users}
+    all_usernames = [user['email'] for user in users]
+    logger.info("总启用用户数: %d", len(all_usernames))
 
-    # 获取待处理任务或初始化新任务
-    pending = CrawlTaskDAO.fetch_pending('app_data', limit=1000)
-    
-    if not pending:
-        # 初始化所有用户的任务
-        logger.info("初始化所有用户的任务，用户数: %d", len(users))
-
+    # 初始化任务（如果需要）
+    if not CrawlTaskDAO.fetch_pending('app_data', 1):
+        logger.info("初始化所有用户任务...")
         init_tasks = []
+
         for user in users:
             username = user['email']
             apps = UserAppDAO.get_user_apps(username)
             
             for app in apps:
-
                 for start_date_str, end_date_str in _daterange(days):
                     init_tasks.append({
                         'task_type': 'app_data',
@@ -130,46 +126,65 @@ def run(days: int = 1):
         
         if init_tasks:
             CrawlTaskDAO.add_tasks(init_tasks)
-            pending = CrawlTaskDAO.fetch_pending('app_data', limit=1000)
+            logger.info("已初始化任务数: %d", len(init_tasks))
 
-    logger.info("待处理任务数: %d", len(pending))
-    if not pending:
-        logger.info("没有待处理的任务")
-        return
+    # 获取线程池配置
+    max_workers = CRAWLER["threads_per_process"]
+    logger.info("使用线程数: %d", max_workers)
 
-    # 按用户分组任务
-    user_groups = _group_tasks_by_user(pending)
-    logger.info("待处理用户数: %d", len(user_groups))
-
-    # 补充密码信息并过滤无效用户
-    valid_user_groups = []
-    for group in user_groups:
-        username = group['username']
-        if username in user_passwords:
-            group['password'] = user_passwords[username]
-            valid_user_groups.append(group)
-        else:
-            logger.warning("用户不存在: %s", username)
-
-    if not valid_user_groups:
-        logger.warning("没有有效的用户任务")
-        return
-
-    # 使用线程池，每个线程处理一个用户的所有任务
-    max_workers = min(len(valid_user_groups), CRAWLER["threads_per_process"])
-    logger.info("使用 %d 个线程处理 %d 个用户", max_workers, len(valid_user_groups))
-
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(_sync_user_apps, user_data) for user_data in valid_user_groups]
-        
-        # 等待所有任务完成
-        for future in futures:
+    # 用户任务处理函数
+    def process_user_tasks(username_queue):
+        while not username_queue.empty():
             try:
-                future.result(timeout=3600)
+                username = username_queue.get(timeout=1)
+                if not username:
+                    continue
+
+                # 获取该用户的待处理任务
+                user_tasks = CrawlTaskDAO.fetch_user_pending_tasks(username, 'app_data', limit=50)
+                if not user_tasks:
+                    logger.info("用户 %s 没有待处理任务", username)
+                    continue
+
+                # 准备用户数据
+                user_data = {
+                    'username': username,
+                    'password': user_passwords.get(username),
+                    'tasks': user_tasks
+                }
+
+                if not user_data['password']:
+                    logger.warning("用户 %s 密码不存在，跳过", username)
+                    continue
+
+                # 处理用户任务
+                logger.info("线程开始处理用户: %s, 任务数: %d", username, len(user_tasks))
+                _sync_user_apps(user_data)
+                logger.info("线程完成处理用户: %s", username)
+
+            except queue.Empty:
+                break
             except Exception as e:
-                logger.error("用户处理失败: %s", e)
-    
-    logger.info("批次完成")
+                logger.error("处理用户任务时出错: %s", str(e))
+            finally:
+                username_queue.task_done()
+
+    # 创建用户队列
+    import queue
+    username_queue = queue.Queue()
+    for username in all_usernames:
+        username_queue.put(username)
+
+    # 使用线程池处理用户队列
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        # 为每个线程分配任务处理器
+        for _ in range(max_workers):
+            pool.submit(process_user_tasks, username_queue)
+
+        # 等待所有用户任务完成
+        username_queue.join()
+
+    logger.info("所有用户任务处理完成")
 
 
 if __name__ == "__main__":
