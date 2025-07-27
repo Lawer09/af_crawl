@@ -123,7 +123,7 @@ class SessionManager:
         username: str,
         user_agent: Optional[str],
         proxies: Optional[dict] = None,
-        ) -> tuple[requests.Session, BrowserContext, dict]:
+        ) -> tuple[requests.Session, BrowserContext, dict, str]:
                 # 增加重试间隔
         import time
         import random
@@ -192,7 +192,7 @@ class SessionManager:
 
             if proxies:
                 s.proxies.update(proxies)
-            return s, ctx, headers
+            return s, ctx.cookies(), headers, ua
         finally:
             try:
                 browser.close()
@@ -211,7 +211,7 @@ class SessionManager:
 
         import config.af_config as cfg
 
-        s, ctx, headers = self._get_bw_session_by_playwright(
+        s, final_cookies, headers,ua = self._get_bw_session_by_playwright(
             username,
             user_agent, 
             proxies)
@@ -219,7 +219,7 @@ class SessionManager:
         payload = {"username": username, "password": password, "keep-user-logged-in": False}
         r = s.post(cfg.LOGIN_API, json=payload, headers=headers, timeout=30)
         r.raise_for_status()
-        final_cookies = ctx.cookies()
+        
         for name in ["af_jwt", "auth_tkt"]:
             if name in s.cookies:
                 final_cookies.append({
