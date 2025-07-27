@@ -30,7 +30,11 @@ def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date
 
     resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
     resp.raise_for_status()
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:
+        logger.error(f"Failed to parse JSON response for {username}, app_id={app_id}: {e}. Response content: {resp.text[:500]}")
+        raise
 
     rows: List[Dict] = []
     for adset in data.get("data", []):
@@ -56,4 +60,4 @@ def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date
         })
 
     UserAppDataDAO.save_data_bulk(rows)
-    return rows 
+    return rows

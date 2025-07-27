@@ -117,7 +117,13 @@ def run(days: int = 1):
             apps = UserAppDAO.get_user_apps(username)
             
             for app in apps:
+                # 生成任务前检查是否已存在相同任务
+                existing_tasks = CrawlTaskDAO.get_existing_tasks(username, app['app_id'], 'app_data')
                 for start_date_str, end_date_str in _daterange(days):
+                    # 跳过已存在的任务
+                    task_key = f"{username}_{app['app_id']}_{start_date_str}_{end_date_str}"
+                    if task_key in existing_tasks:
+                        continue
                     init_tasks.append({
                         'task_type': 'app_data',
                         'username': username,

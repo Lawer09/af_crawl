@@ -52,6 +52,16 @@ class CrawlTaskDAO:
         mysql_pool.executemany(sql, params)
 
     @classmethod
+    def get_existing_tasks(cls, username: str, app_id: str, task_type: str) -> set:
+        sql = f"""
+        SELECT CONCAT(username, '_', app_id, '_', start_date, '_', end_date) as task_key
+        FROM {cls.TABLE}
+        WHERE username = %s AND app_id = %s AND task_type = %s
+        """
+        results = mysql_pool.select(sql, (username, app_id, task_type))
+        return {row['task_key'] for row in results}
+
+    @classmethod
     def fetch_pending(cls, task_type: str, limit: int = 100) -> List[Dict]:
         sql = f"""SELECT * FROM {cls.TABLE}
                  WHERE task_type=%s AND status='pending' AND next_run_at<=NOW()
