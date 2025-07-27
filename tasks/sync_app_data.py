@@ -40,6 +40,9 @@ def _sync_user_apps(user_data: Dict) -> None:
     tasks = user_data['tasks']
     
     logger.info("开始处理用户: %s, 任务数: %d", username, len(tasks))
+    total_tasks = CrawlTaskDAO.get_user_total_tasks(username, 'app_data')
+    completed_tasks = CrawlTaskDAO.get_user_completed_tasks(username, 'app_data')
+    logger.info("用户 %s 总任务数: %d, 已完成: %d", username, total_tasks, completed_tasks)
     
     for task in tasks:
         task_id = task['id']
