@@ -78,5 +78,12 @@ class CrawlTaskDAO:
         mysql_pool.execute(f"DELETE FROM {cls.TABLE}")
 
     @classmethod
+    def fetch_user_pending_tasks(cls, username: str, task_type: str, limit: int = 50) -> List[Dict]:
+        sql = f"""SELECT * FROM {cls.TABLE}
+                 WHERE username=%s AND task_type=%s AND status='pending' AND next_run_at<=NOW()
+                 ORDER BY next_run_at LIMIT %s"""
+        return mysql_pool.select(sql, (username, task_type, limit))
+
+    @classmethod
     def reset_failed(cls):
-        mysql_pool.execute(f"UPDATE {cls.TABLE} SET status='pending' WHERE status='failed'") 
+        mysql_pool.execute(f"UPDATE {cls.TABLE} SET status='pending' WHERE status='failed'")
