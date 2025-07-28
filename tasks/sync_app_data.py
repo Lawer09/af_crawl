@@ -140,7 +140,6 @@ def run(days: int = 1):
                 username = username_queue.get(timeout=1)
                 if not username:
                     continue
-
                 # 获取该用户的待处理任务
                 user_tasks = CrawlTaskDAO.fetch_user_pending_tasks(username, 'app_data', limit=50)
                 if not user_tasks:
@@ -170,20 +169,21 @@ def run(days: int = 1):
             finally:
                 username_queue.task_done()
 
-    # 创建用户队列
-    import queue
-    username_queue = queue.Queue()
-    for username in all_usernames:
-        username_queue.put(username)
+    while CrawlTaskDAO.fetch_pending('app_data', 1):
+        # 创建用户队列
+        import queue
+        username_queue = queue.Queue()
+        for username in all_usernames:
+            username_queue.put(username)
 
-    # 使用线程池处理用户队列
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        # 为每个线程分配任务处理器
-        for _ in range(max_workers):
-            pool.submit(process_user_tasks, username_queue)
+        # 使用线程池处理用户队列
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            # 为每个线程分配任务处理器
+            for _ in range(max_workers):
+                pool.submit(process_user_tasks, username_queue)
 
-        # 等待所有用户任务完成
-        username_queue.join()
+            # 等待所有用户任务完成
+            username_queue.join()
 
     logger.info("所有用户任务处理完成")
 
