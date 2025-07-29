@@ -23,7 +23,7 @@ MYSQL = {
 
 # 报表数据库连接配置
 REPORT_MYSQL = {
-    'host': 'am-0xik4h64jnjs97jk5167330o.ads.aliyuncs.com',
+    'host': 'am-0xik4h64jnjs97jk5167330.ads.aliyuncs.com',
     'port': 3306,
     'user': 'report_rw',
     'password': '4ZvALsdD0_JHtA2gg@L3@2024',
