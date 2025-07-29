@@ -41,26 +41,26 @@ class MySQLPool:
 class ReportMySQLPool(MySQLPool):
     """MySQL 连接池包装，提供最基本的 select / execute / executemany / fetch_one 方法"""
 
-    _instance: "MySQLPool" | None = None
+    _instance: "ReportMySQLPool" | None = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, config: dict):
         if hasattr(self, "_initialized") and self._initialized:  # 避免重复初始化
             return
         try:
             self.pool: MySQLConnectionPool = MySQLConnectionPool(
-                pool_name=MYSQL["pool_name"],
-                pool_size=MYSQL["pool_size"],
-                **{k: v for k, v in MYSQL.items() if k not in {"pool_name", "pool_size"}}
+                pool_name=config["pool_name"],
+                pool_size=config["pool_size"],
+                **{k: v for k, v in config.items() if k not in {"pool_name", "pool_size"}}
             )
             self._initialized = True
             logger.info(
                 "MySQL connection pool created: host=%s db=%s size=%s",
-                MYSQL["host"], MYSQL["database"], MYSQL["pool_size"],
+                config["host"], config["database"], config["pool_size"],
             )
         except mysql.connector.Error as e:
             logger.exception("[MySQL] create pool failed: %s", e)
