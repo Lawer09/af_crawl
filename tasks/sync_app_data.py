@@ -14,6 +14,12 @@ from model.user_app import UserAppDAO
 from model.user_app_data import UserAppDataDAO
 from model.crawl_task import CrawlTaskDAO
 from services.data_service import fetch_and_save_table_data
+from model.af_data import AfData, AfDataDAO
+from core.db import mysql_pool
+from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 from config.settings import CRAWLER
 from core.logger import setup_logging  # noqa
 
@@ -92,7 +98,53 @@ def _group_tasks_by_user(pending_tasks: List[Dict]) -> List[Dict]:
     return list(user_groups.values())
 
 
+def _migrate_af_user_app_data() -> None:
+    try:
+        # 获取前一天日期
+        prev_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        logger.info(f"开始迁移 {prev_date} 的数据到af_data表")
+
+        # 查询前一天的数据
+        sql = """
+        SELECT offer_id, start_date as date, af_clicks as clicks, af_installs as installs
+        FROM af_user_app_data
+        WHERE start_date = %s
+        """
+        results = mysql_pool.select(sql, (prev_date,))
+
+        if not results:
+            logger.info(f"未找到 {prev_date} 的数据，无需迁移")
+            return
+
+        # 转换为AfData对象列表
+        af_data_list = []
+        now_datetime = datetime.now()
+        for item in results:
+            af_data = AfData(
+                offer_id=item['offer_id'],
+                date=item['date'],
+                clicks=item['clicks'],
+                installs=item['installs'],
+                aff_id=0,  # 默认值
+                app_id=0,   # 默认值
+                created_at=now_datetime
+            )
+            af_data_list.append(af_data)
+
+        # 批量保存
+        AfDataDAO.save_data_bulk(af_data_list)
+        logger.info(f"成功迁移 {len(af_data_list)} 条数据到af_data表")
+
+    except Exception as e:
+        logger.exception("迁移数据到af_data表失败")
+        raise
+
 def run(days: int = 1):
+
+    if AfDataDAO.exists_prev_day_data():
+        logger.info("前一天数据已存在于af_data表，跳过同步任务")
+        return
+
     """多线程用户任务分配 - 按线程数均衡分配用户任务"""
     CrawlTaskDAO.init_table()
 
@@ -186,6 +238,8 @@ def run(days: int = 1):
             username_queue.join()
 
     logger.info("所有用户任务处理完成")
+
+    _migrate_af_user_app_data()
 
 
 if __name__ == "__main__":

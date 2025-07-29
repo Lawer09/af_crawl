@@ -10,7 +10,7 @@ dotenv_path = BASE_DIR / '.env'
 if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
-# 数据库连接配置
+# 主数据库连接配置
 MYSQL = {
     'host': os.getenv('MYSQL_HOST', 'localhost'),
     'port': int(os.getenv('MYSQL_PORT', '3306')),
@@ -18,7 +18,18 @@ MYSQL = {
     'password': os.getenv('MYSQL_PASSWORD', ''),
     'database': os.getenv('MYSQL_DATABASE', 'af_crawl'),
     'pool_name': 'af_pool',
-    'pool_size': int(os.getenv('MYSQL_POOL_SIZE', '10')),
+    'pool_size': int(os.getenv('MYSQL_POOL_SIZE', '5')),
+}
+
+# 报表数据库连接配置
+REPORT_MYSQL = {
+    'host': 'am-0xik4h64jnjs97jk5167330o.ads.aliyuncs.com',
+    'port': 3306,
+    'user': 'report_rw',
+    'password': '4ZvALsdD0_JHtA2gg@L3@2024',
+    'database': 'adbink_report',
+    'pool_name': 'report_pool',
+    'pool_size': 5,
 }
 
 # 是否使用代理

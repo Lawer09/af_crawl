@@ -6,12 +6,39 @@ from typing import Any, Dict, List, Tuple, Optional
 import mysql.connector
 from mysql.connector.pooling import MySQLConnectionPool, PooledMySQLConnection
 
-from config.settings import MYSQL
+from config.settings import MYSQL, REPORT_MYSQL
 
 logger = logging.getLogger(__name__)
 
 
 class MySQLPool:
+    _instance: "MySQLPool" | None = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self, config: dict):
+        if hasattr(self, "_initialized") and self._initialized:  # 避免重复初始化
+            return
+        try:
+            self.pool: MySQLConnectionPool = MySQLConnectionPool(
+                pool_name=config["pool_name"],
+                pool_size=config["pool_size"],
+                **{k: v for k, v in config.items() if k not in {"pool_name", "pool_size"}}
+            )
+            self._initialized = True
+            logger.info(
+                "MySQL connection pool created: host=%s db=%s size=%s",
+                config["host"], config["database"], config["pool_size"],
+            )
+        except mysql.connector.Error as e:
+            logger.exception("[MySQL] create pool failed: %s", e)
+            raise
+
+
+class ReportMySQLPool(MySQLPool):
     """MySQL 连接池包装，提供最基本的 select / execute / executemany / fetch_one 方法"""
 
     _instance: "MySQLPool" | None = None
@@ -90,4 +117,5 @@ class MySQLPool:
 
 
 # 单例
-mysql_pool = MySQLPool() 
+mysql_pool = MySQLPool(MYSQL)
+report_mysql_pool = ReportMySQLPool(REPORT_MYSQL)
