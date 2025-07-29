@@ -11,10 +11,9 @@ from typing import List, Dict, Tuple
 
 from model.user import UserDAO
 from model.user_app import UserAppDAO
-from model.user_app_data import UserAppDataDAO
 from model.crawl_task import CrawlTaskDAO
 from services.data_service import fetch_and_save_table_data
-from model.af_data import AfData, AfDataDAO
+from model.af_data import AfDataDAO
 from core.db import mysql_pool
 from datetime import datetime, timedelta
 import logging
@@ -120,15 +119,15 @@ def _migrate_af_user_app_data() -> None:
         af_data_list = []
         now_datetime = datetime.now()
         for item in results:
-            af_data = AfData(
-                offer_id=item['offer_id'],
-                date=item['date'],
-                clicks=item['clicks'],
-                installs=item['installs'],
-                aff_id=0,  # 默认值
-                app_id=0,   # 默认值
-                created_at=now_datetime
-            )
+            af_data = {
+                'offer_id': item['offer_id'],
+                'date': item['date'],
+                'clicks': item['clicks'],
+                'installs': item['installs'],
+                'aff_id': 0,  # 默认值
+                'app_id': 0,   # 默认值
+                'created_at': now_datetime
+            }
             af_data_list.append(af_data)
 
         # 批量保存
