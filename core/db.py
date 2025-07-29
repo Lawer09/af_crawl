@@ -10,18 +10,9 @@ from config.settings import MYSQL, REPORT_MYSQL
 
 logger = logging.getLogger(__name__)
 
-
 class MySQLPool:
-    _instance: "MySQLPool" | None = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
 
     def __init__(self, config: dict):
-        if hasattr(self, "_initialized") and self._initialized:  # 避免重复初始化
-            return
         try:
             self.pool: MySQLConnectionPool = MySQLConnectionPool(
                 pool_name=config["pool_name"],
