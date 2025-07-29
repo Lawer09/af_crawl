@@ -22,6 +22,9 @@ class UserDAO:
     def get_user(cls, email: str) -> Optional[Dict]:
         try:
             rows = cls.select_sql("SELECT email, password, account_type FROM af_users WHERE email = %s", (email,))
+            if rows:
+                return rows[0]
+            return None
         except Exception as e:
             logger.error(f"Error fetching user by email: {e}")
             return None

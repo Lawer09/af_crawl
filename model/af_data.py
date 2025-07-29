@@ -1,25 +1,11 @@
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
+from typing import List, Dict
 from core.db import report_mysql_pool
 
-
-@dataclass
-class AfData:
-    id: Optional[int] = None
-    offer_id: int
-    aff_id: int = 0
-    clicks: int = 0
-    installs: int = 0
-    app_id: int = 0
-    timezone: Optional[str] = None
-    created_at: Optional[datetime] = None
-    pid: Optional[str] = None
-    prt: Optional[str] = None
-    date: Optional[str] = None
-
+import logging
+logger = logging.getLogger(__name__)
 
 class AfDataDAO:
+
     @staticmethod
     def exists_prev_day_data() -> bool:
         from datetime import datetime, timedelta
@@ -33,7 +19,7 @@ class AfDataDAO:
             return False
 
     @staticmethod
-    def save_data_bulk(data_list: list[AfData]) -> None:
+    def save_data_bulk(data_list: List[Dict]) -> None:
         if not data_list:
             return
 
@@ -46,8 +32,8 @@ class AfDataDAO:
 
         params = [
             (
-                item.offer_id, item.aff_id, item.clicks, item.installs,
-                item.app_id, item.timezone, item.created_at, item.pid, item.prt, item.date
+                item['offer_id'], item['aff_id'], item['clicks'], item['installs'],
+                item['app_id'], item['timezone'], item['created_at'], item['pid'], item['prt'], item['date']
             )
             for item in data_list
         ]
