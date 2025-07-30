@@ -115,7 +115,6 @@ def _migrate_af_user_app_data() -> None:
             logger.info(f"未找到 {prev_date} 的数据，无需迁移")
             return
 
-        # 转换为AfData对象列表
         af_data_list = []
         now_datetime = datetime.now()
         for item in results:
@@ -124,6 +123,10 @@ def _migrate_af_user_app_data() -> None:
                 'date': item['date'],
                 'clicks': item['clicks'],
                 'installs': item['installs'],
+                'timezone':'UTC+8',
+                'pid':'',
+                'prt':'',
+                'aff_id':'',
                 'aff_id': 0,  # 默认值
                 'app_id': 0,   # 默认值
                 'created_at': now_datetime
