@@ -12,8 +12,13 @@ from model.user_app import UserAppDAO
 from model.user_app_data import UserAppDataDAO
 from model.crawl_task import CrawlTaskDAO
 from tasks.sync_app_data import run as run_sync_task
+from api.distribution_api import router as distribution_router, init_distribution_services
+from config.distribution_config import get_distribution_config
 
 app = FastAPI(title="App数据同步系统", description="用户APP数据同步管理界面")
+
+# 包含分布式API路由
+app.include_router(distribution_router)
 
 # 创建必要的目录
 os.makedirs("templates", exist_ok=True)
@@ -111,6 +116,22 @@ async def run_tasks():
         return {"message": "任务执行已启动"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时初始化分布式服务"""
+    try:
+        # 获取分布式配置
+        config = get_distribution_config()
+        
+        # 初始化分布式服务（默认为standalone模式）
+        init_distribution_services(mode="standalone", device_id=config.device_id)
+        
+        print(f"Distribution services initialized in {config.mode.value} mode")
+        
+    except Exception as e:
+        print(f"Warning: Failed to initialize distribution services: {e}")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

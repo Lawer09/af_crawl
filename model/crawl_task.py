@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class CrawlTaskDAO:
     """任务表: 记录爬虫执行进度，支持失败延迟、重启续跑"""
 
-    TABLE = "af_crawl_tasks"
+    TABLE = "cl_crawl_tasks"
 
     CREATE_SQL = f"""
     CREATE TABLE IF NOT EXISTS {TABLE} (
@@ -23,11 +23,20 @@ class CrawlTaskDAO:
         start_date DATE DEFAULT NULL,
         end_date DATE DEFAULT NULL,
         retry INT DEFAULT 0,
-        status ENUM('pending','running','failed','done') DEFAULT 'pending',
+        status ENUM('pending','running','failed','done','assigned') DEFAULT 'pending',
         next_run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        assigned_device_id VARCHAR(64) DEFAULT NULL COMMENT '分配的设备ID',
+        assigned_at DATETIME DEFAULT NULL COMMENT '分配时间',
+        priority INT DEFAULT 0 COMMENT '任务优先级',
+        task_data JSON DEFAULT NULL COMMENT '任务数据',
+        execution_timeout INT DEFAULT 3600 COMMENT '执行超时时间(秒)',
+        max_retry_count INT DEFAULT 3 COMMENT '最大重试次数',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        KEY idx_status_next (status, next_run_at)
+        KEY idx_status_next (status, next_run_at),
+        KEY idx_assigned_device (assigned_device_id),
+        KEY idx_priority (priority),
+        KEY idx_task_type_status (task_type, status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
@@ -42,12 +51,16 @@ class CrawlTaskDAO:
             return
         sql = f"""
         INSERT INTO {cls.TABLE}
-            (task_type, username, app_id, start_date, end_date, next_run_at)
-        VALUES (%s,%s,%s,%s,%s,%s)
-        ON DUPLICATE KEY UPDATE status='pending'
+            (task_type, username, app_id, start_date, end_date, next_run_at, priority, task_data, execution_timeout, max_retry_count)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON DUPLICATE KEY UPDATE status='pending', priority=VALUES(priority)
         """
+        import json
         params = [(
-            t['task_type'], t['username'], t.get('app_id'), t.get('start_date'), t.get('end_date'), t.get('next_run_at')
+            t['task_type'], t['username'], t.get('app_id'), t.get('start_date'), t.get('end_date'), 
+            t.get('next_run_at'), t.get('priority', 0), 
+            json.dumps(t.get('task_data')) if t.get('task_data') else None,
+            t.get('execution_timeout', 3600), t.get('max_retry_count', 3)
         ) for t in tasks]
         mysql_pool.executemany(sql, params)
 
@@ -69,8 +82,14 @@ class CrawlTaskDAO:
         return mysql_pool.select(sql, (task_type, limit))
 
     @classmethod
-    def mark_running(cls, task_id: int):
-        mysql_pool.execute(f"UPDATE {cls.TABLE} SET status='running' WHERE id=%s", (task_id,))
+    def mark_running(cls, task_id: int, device_id: Optional[str] = None):
+        if device_id:
+            mysql_pool.execute(
+                f"UPDATE {cls.TABLE} SET status='running', assigned_device_id=%s, assigned_at=NOW() WHERE id=%s", 
+                (device_id, task_id)
+            )
+        else:
+            mysql_pool.execute(f"UPDATE {cls.TABLE} SET status='running' WHERE id=%s", (task_id,))
 
     @classmethod
     def mark_done(cls, task_id: int):
@@ -110,4 +129,126 @@ class CrawlTaskDAO:
 
     @classmethod
     def reset_failed(cls):
-        mysql_pool.execute(f"UPDATE {cls.TABLE} SET status='pending' WHERE status='failed'")
+        mysql_pool.execute(
+            f"UPDATE {cls.TABLE} SET status='pending', assigned_device_id=NULL, assigned_at=NULL WHERE status='failed'"
+        )
+    
+    # ---------- 分布式任务相关方法 ----------
+    @classmethod
+    def assign_task(cls, task_id: int, device_id: str) -> bool:
+        """分配任务给设备"""
+        try:
+            sql = f"""
+            UPDATE {cls.TABLE} 
+            SET status='assigned', assigned_device_id=%s, assigned_at=NOW(), updated_at=NOW()
+            WHERE id=%s AND status='pending'
+            """
+            result = mysql_pool.execute(sql, (device_id, task_id))
+            return result > 0
+        except Exception as e:
+            logger.exception(f"Failed to assign task: task_id={task_id}, device_id={device_id}, error={e}")
+            return False
+    
+    @classmethod
+    def get_assignable_tasks(cls, task_type: Optional[str] = None, limit: int = 100) -> List[Dict]:
+        """获取可分配的任务"""
+        try:
+            if task_type:
+                sql = f"""
+                SELECT * FROM {cls.TABLE}
+                WHERE task_type=%s AND status='pending' AND next_run_at<=NOW()
+                ORDER BY priority DESC, next_run_at ASC
+                LIMIT %s
+                """
+                return mysql_pool.select(sql, (task_type, limit))
+            else:
+                sql = f"""
+                SELECT * FROM {cls.TABLE}
+                WHERE status='pending' AND next_run_at<=NOW()
+                ORDER BY priority DESC, next_run_at ASC
+                LIMIT %s
+                """
+                return mysql_pool.select(sql, (limit,))
+        except Exception as e:
+            logger.exception(f"Failed to get assignable tasks: error={e}")
+            return []
+    
+    @classmethod
+    def get_device_tasks(cls, device_id: str) -> List[Dict]:
+        """获取设备分配的任务"""
+        try:
+            sql = f"""
+            SELECT * FROM {cls.TABLE}
+            WHERE assigned_device_id=%s AND status IN ('assigned', 'running')
+            ORDER BY assigned_at
+            """
+            return mysql_pool.select(sql, (device_id,))
+        except Exception as e:
+            logger.exception(f"Failed to get device tasks: device_id={device_id}, error={e}")
+            return []
+    
+    @classmethod
+    def release_device_tasks(cls, device_id: str) -> int:
+        """释放设备的所有任务"""
+        try:
+            sql = f"""
+            UPDATE {cls.TABLE} 
+            SET status='pending', assigned_device_id=NULL, assigned_at=NULL, updated_at=NOW()
+            WHERE assigned_device_id=%s AND status IN ('assigned', 'running')
+            """
+            return mysql_pool.execute(sql, (device_id,))
+        except Exception as e:
+            logger.exception(f"Failed to release device tasks: device_id={device_id}, error={e}")
+            return 0
+    
+    @classmethod
+    def get_timeout_tasks(cls, timeout_minutes: int = 60) -> List[Dict]:
+        """获取超时的任务"""
+        try:
+            from datetime import datetime, timedelta
+            timeout_time = datetime.now() - timedelta(minutes=timeout_minutes)
+            
+            sql = f"""
+            SELECT * FROM {cls.TABLE}
+            WHERE status IN ('assigned', 'running') 
+              AND assigned_at < %s
+            ORDER BY assigned_at
+            """
+            return mysql_pool.select(sql, (timeout_time,))
+        except Exception as e:
+            logger.exception(f"Failed to get timeout tasks: error={e}")
+            return []
+    
+    @classmethod
+    def get_task_stats(cls) -> Dict:
+        """获取任务统计信息"""
+        try:
+            sql = f"""
+            SELECT 
+                status,
+                COUNT(*) as count
+            FROM {cls.TABLE}
+            GROUP BY status
+            """
+            
+            results = mysql_pool.select(sql)
+            stats = {row['status']: row['count'] for row in results}
+            
+            # 添加总数
+            stats['total'] = sum(stats.values())
+            
+            return stats
+        except Exception as e:
+            logger.exception(f"Failed to get task stats: error={e}")
+            return {}
+    
+    @classmethod
+    def update_task_priority(cls, task_id: int, priority: int) -> bool:
+        """更新任务优先级"""
+        try:
+            sql = f"UPDATE {cls.TABLE} SET priority=%s, updated_at=NOW() WHERE id=%s"
+            result = mysql_pool.execute(sql, (priority, task_id))
+            return result > 0
+        except Exception as e:
+            logger.exception(f"Failed to update task priority: task_id={task_id}, priority={priority}, error={e}")
+            return False

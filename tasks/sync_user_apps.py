@@ -3,9 +3,11 @@ from __future__ import annotations
 """同步所有启用用户的 App 列表"""
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 import random
 from datetime import date
+from typing import Dict, Any
 
 from model.user import UserDAO
 from services.app_service import fetch_and_save_apps
@@ -14,6 +16,54 @@ from core.logger import setup_logging  # noqa: F401  # 触发日志初始化
 from model.crawl_task import CrawlTaskDAO
 
 logger = logging.getLogger(__name__)
+
+
+def sync_user_apps(username: str) -> Dict[str, Any]:
+    """同步单个用户的应用列表 - 用于分布式任务执行器
+    
+    Args:
+        username: 用户邮箱/用户名
+        
+    Returns:
+        Dict containing sync results
+    """
+    start_time = time.time()
+    
+    try:
+        logger.info(f"Starting app sync for user: {username}")
+        
+        # 获取用户信息
+        user = UserDAO.get_user_by_email(username)
+        if not user:
+            raise ValueError(f"User not found: {username}")
+        
+        # 同步应用
+        apps = fetch_and_save_apps(user)
+        
+        execution_time = time.time() - start_time
+        
+        logger.info(f"App sync completed for user {username}: {len(apps)} apps synced in {execution_time:.2f}s")
+        
+        return {
+            "status": "success",
+            "username": username,
+            "synced_apps": len(apps),
+            "execution_time": execution_time
+        }
+        
+    except Exception as e:
+        execution_time = time.time() - start_time
+        error_msg = f"Failed to sync apps for user {username}: {e}"
+        logger.exception(error_msg)
+        
+        return {
+            "status": "error",
+            "username": username,
+            "synced_apps": 0,
+            "execution_time": execution_time,
+            "error_message": str(e),
+            "error_type": type(e).__name__
+        }
 
 
 def _worker(params):
@@ -54,4 +104,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run() 
+    run()

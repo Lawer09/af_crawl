@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime
 import time
 import random
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any, Optional
 
 from model.user import UserDAO
 from model.user_app import UserAppDAO
@@ -23,6 +23,150 @@ from config.settings import CRAWLER
 from core.logger import setup_logging  # noqa
 
 logger = logging.getLogger(__name__)
+
+
+def sync_app_data(
+    username: str,
+    app_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+) -> Dict[str, Any]:
+    """同步应用数据 - 用于分布式任务执行器
+    
+    Args:
+        username: 用户邮箱/用户名
+        app_id: 应用ID，如果为None则同步所有应用
+        start_date: 开始日期 (YYYY-MM-DD)
+        end_date: 结束日期 (YYYY-MM-DD)
+        
+    Returns:
+        Dict containing sync results
+    """
+    start_time = time.time()
+    synced_records = 0
+    errors = []
+    
+    try:
+        logger.info(f"Starting data sync for user: {username}, app: {app_id}")
+        
+        # 获取用户信息
+        user = UserDAO.get_user_by_email(username)
+        if not user:
+            raise ValueError(f"User not found: {username}")
+        
+        # 处理日期参数
+        if start_date:
+            try:
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValueError(f"Invalid start_date format: {start_date}. Expected YYYY-MM-DD")
+        else:
+            start_date_obj = date.today() - timedelta(days=1)
+        
+        if end_date:
+            try:
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValueError(f"Invalid end_date format: {end_date}. Expected YYYY-MM-DD")
+        else:
+            end_date_obj = start_date_obj
+        
+        # 获取要同步的应用列表
+        if app_id:
+            # 同步指定应用
+            user_app = UserAppDAO.get_user_app(username, app_id)
+            if not user_app:
+                raise ValueError(f"App {app_id} not found for user {username}")
+            apps_to_sync = [user_app]
+        else:
+            # 同步所有应用
+            apps_to_sync = UserAppDAO.get_user_apps(username)
+        
+        if not apps_to_sync:
+            logger.warning(f"No apps found for user {username}")
+            return {
+                "status": "success",
+                "username": username,
+                "app_id": app_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "synced_records": 0,
+                "execution_time": time.time() - start_time,
+                "message": "No apps to sync"
+            }
+        
+        # 同步每个应用的数据
+        for app in apps_to_sync:
+            try:
+                current_date = start_date_obj
+                while current_date <= end_date_obj:
+                    try:
+                        # 调用数据同步服务
+                        records = fetch_and_save_table_data(
+                            user=user,
+                            app=app,
+                            start_date=current_date.isoformat(),
+                            end_date=current_date.isoformat()
+                        )
+                        
+                        synced_records += len(records) if records else 0
+                        
+                        logger.debug(
+                            f"Synced {len(records) if records else 0} records for "
+                            f"user {username}, app {app.get('app_id')}, date {current_date}"
+                        )
+                        
+                    except Exception as e:
+                        error_msg = (
+                            f"Error syncing data for app {app.get('app_id')} "
+                            f"on date {current_date}: {e}"
+                        )
+                        logger.error(error_msg)
+                        errors.append(error_msg)
+                    
+                    # 移动到下一天
+                    current_date += timedelta(days=1)
+                    
+            except Exception as e:
+                error_msg = f"Error processing app {app.get('app_id')}: {e}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        execution_time = time.time() - start_time
+        
+        logger.info(
+            f"Data sync completed for user {username}: "
+            f"{synced_records} records synced in {execution_time:.2f}s"
+        )
+        
+        return {
+            "status": "success",
+            "username": username,
+            "app_id": app_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "synced_records": synced_records,
+            "execution_time": execution_time,
+            "errors": errors
+        }
+        
+    except Exception as e:
+        execution_time = time.time() - start_time
+        error_msg = f"Failed to sync data for user {username}: {e}"
+        logger.exception(error_msg)
+        
+        return {
+            "status": "error",
+            "username": username,
+            "app_id": app_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "synced_records": synced_records,
+            "execution_time": execution_time,
+            "error_message": str(e),
+            "error_type": type(e).__name__,
+            "errors": errors
+        }
 
 
 def _daterange(days: int):
