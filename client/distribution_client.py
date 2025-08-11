@@ -136,7 +136,7 @@ class DistributionClient:
         if not self.device_id:
             return False
         
-        result = self._make_request("PUT", f"/devices/{self.device_id}/status", json=status)
+        result = self._make_request("PUT", f"/devices/{self.device_id}/status", json={"status": status})
         
         return result and result.get("status") == "success"
     
@@ -508,7 +508,7 @@ class AsyncDistributionClient:
         if not self.device_id:
             return False
         
-        result = await self._make_request("PUT", f"/devices/{self.device_id}/status", json=status)
+        result = await self._make_request("PUT", f"/devices/{self.device_id}/status", json={"status": status})
         
         return result and result.get("status") == "success"
     
