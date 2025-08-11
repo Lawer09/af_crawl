@@ -76,13 +76,18 @@ class TaskStatusUpdate(BaseModel):
 async def register_device(device: DeviceRegistration):
     """注册设备"""
     try:
-        success = DeviceDAO.register_device(
-            device_id=device.device_id,
-            device_name=device.device_name,
-            device_type=device.device_type,
-            ip_address=device.ip_address,
-            capabilities=device.capabilities
-        )
+        # 构造设备信息字典
+        device_info = {
+            'device_id': device.device_id,
+            'device_name': device.device_name,
+            'device_type': device.device_type,
+            'ip_address': device.ip_address or '0.0.0.0',
+            'port': 0,  # 默认端口
+            'capabilities': device.capabilities or {},
+            'max_concurrent_tasks': 5  # 默认并发任务数
+        }
+        
+        success = DeviceDAO.register_device(device_info)
         
         if success:
             return {"status": "success", "message": "Device registered successfully"}
