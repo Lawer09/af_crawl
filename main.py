@@ -19,7 +19,6 @@ from config.settings import USE_PROXY, CRAWLER
 
 logger = logging.getLogger(__name__)
 
-
 def _parse_args():
     parser = argparse.ArgumentParser(description="AppsFlyer Crawler")
     sub = parser.add_subparsers(dest="command", required=True)
