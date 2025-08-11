@@ -3,7 +3,7 @@
   "device_id": "master-001",
   "device_name": "Master Node",
   "device_type": "master",
-  "master_host": "localhost",
+  "master_host": "0.0.0.0",
   "master_port": 7989,
   "master_api_prefix": "/api/distribution",
   "dispatch_interval": 5,

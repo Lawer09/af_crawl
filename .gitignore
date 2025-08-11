@@ -3,6 +3,5 @@
 
 */__pycache__
 
-run.log
 *.log
 */*.log

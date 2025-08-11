@@ -3,7 +3,7 @@
   "device_id": "standalone-001",
   "device_name": "Standalone Node",
   "device_type": "standalone",
-  "master_host": "localhost",
+  "master_host": "0.0.0.0",
   "master_port": 7989,
   "master_api_prefix": "/api/distribution",
   "dispatch_interval": 10,
