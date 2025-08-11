@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
+from model.crawl_task import CrawlTaskDAO
 
 from core.db import mysql_pool
 
@@ -45,6 +46,12 @@ class TaskAssignmentDAO:
     def create_assignment(cls, task_id: int, device_id: str) -> Optional[int]:
         """创建任务分配记录"""
         try:
+            # 首先检查是否已存在分配记录
+            existing = cls.get_assignment_by_task_device(task_id, device_id)
+            if existing:
+                logger.info(f"Task assignment already exists: task_id={task_id}, device_id={device_id}, assignment_id={existing['id']}")
+                return existing['id']
+            
             sql = f"""
             INSERT INTO {cls.TABLE} (task_id, device_id, status)
             VALUES (%s, %s, 'assigned')
@@ -139,7 +146,7 @@ class TaskAssignmentDAO:
             SELECT ta.id, ta.task_id, ta.device_id, ta.status, ta.assigned_at, 
                    ta.started_at, ta.retry_count, ct.task_type, ct.task_data
             FROM {cls.TABLE} ta
-            JOIN af_crawl_task ct ON ta.task_id = ct.id
+            JOIN {CrawlTaskDAO.TABLE} ct ON ta.task_id = ct.id
             WHERE ta.device_id = %s AND ta.status IN ('assigned', 'running')
             ORDER BY ta.assigned_at
             """

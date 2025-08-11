@@ -23,13 +23,13 @@ MYSQL = {
 
 # 报表数据库连接配置
 REPORT_MYSQL = {
-    'host': 'am-0xik4h64jnjs97jk5167330.ads.aliyuncs.com',
-    'port': 3306,
-    'user': 'report_rw',
-    'password': '4ZvALsdD0_JHtA2gg@L3@2024',
-    'database': 'adbink_report',
-    'pool_name': 'report_pool',
-    'pool_size': 5,
+    'host': os.getenv('REPORT_MYSQL_HOST', 'localhost'),
+    'port': int(os.getenv('REPORT_MYSQL_PORT', '3306')),
+    'user': os.getenv('REPORT_MYSQL_USER', 'root'),
+    'password': os.getenv('REPORT_MYSQL_PASSWORD', ''),
+    'database': os.getenv('REPORT_MYSQL_DATABASE', 'adbink_report'),
+    'pool_name': os.getenv('REPORT_MYSQL_POOL_NAME', 'report_pool'),
+    'pool_size': int(os.getenv('REPORT_MYSQL_POOL_SIZE', '5')),
 }
 
 # 是否使用代理

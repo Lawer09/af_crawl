@@ -19,8 +19,11 @@ import os
 import signal
 import sys
 import time
+import threading
 from pathlib import Path
 from typing import Optional
+import uvicorn
+from fastapi import FastAPI
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -53,6 +56,8 @@ class DistributionCLI:
         self.config: Optional[DistributionConfig] = None
         self.running = False
         self.shutdown_event = asyncio.Event()
+        self.http_server_thread = None
+        self.uvicorn_server = None
     
     def _ensure_device_id(self, device_id: Optional[str], mode: str) -> str:
         """确保device_id存在，如果没有则自动生成"""
@@ -91,9 +96,61 @@ class DistributionCLI:
             logger.info(f"Received signal {signum}, shutting down...")
             self.running = False
             self.shutdown_event.set()
+            # 停止HTTP服务器
+            self._stop_http_server()
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
+    
+    def _start_http_server(self, host: str, port: int):
+        """启动HTTP服务器"""
+        try:
+            # 导入FastAPI应用
+            from web_app import app
+            
+            # 创建uvicorn配置
+            config = uvicorn.Config(
+                app=app,
+                host=host,
+                port=port,
+                log_level="info",
+                access_log=True
+            )
+            
+            # 创建服务器实例
+            self.uvicorn_server = uvicorn.Server(config)
+            
+            # 在单独线程中启动服务器
+            def run_server():
+                try:
+                    asyncio.run(self.uvicorn_server.serve())
+                except Exception as e:
+                    logger.error(f"HTTP server error: {e}")
+            
+            self.http_server_thread = threading.Thread(target=run_server, daemon=True)
+            self.http_server_thread.start()
+            
+            logger.info(f"HTTP API server started on http://{host}:{port}")
+            logger.info(f"API documentation available at http://{host}:{port}/docs")
+            
+        except Exception as e:
+            logger.error(f"Failed to start HTTP server: {e}")
+    
+    def _stop_http_server(self):
+        """停止HTTP服务器"""
+        if self.uvicorn_server:
+            try:
+                self.uvicorn_server.should_exit = True
+                logger.info("HTTP server shutdown initiated")
+            except Exception as e:
+                logger.error(f"Error stopping HTTP server: {e}")
+        
+        if self.http_server_thread and self.http_server_thread.is_alive():
+            try:
+                self.http_server_thread.join(timeout=5)
+                logger.info("HTTP server thread stopped")
+            except Exception as e:
+                logger.error(f"Error joining HTTP server thread: {e}")
     
     def load_config(self, config_file: Optional[str] = None, **kwargs) -> DistributionConfig:
         """加载配置"""
@@ -180,9 +237,13 @@ class DistributionCLI:
             # 启动服务
             start_distribution_services()
             
+            # 启动HTTP API服务器
+            self._start_http_server(config.master_host, config.master_port)
+            
             logger.info(f"Master node started on {config.master_host}:{config.master_port}")
             logger.info(f"Device ID: {config.device_id}")
             logger.info(f"Load balance strategy: {config.load_balance_strategy.value}")
+            logger.info(f"HTTP API available at http://{config.master_host}:{config.master_port}/api/distribution/")
             
             # 设置信号处理
             self.setup_signal_handlers()
@@ -199,6 +260,7 @@ class DistributionCLI:
             return 1
         finally:
             logger.info("Stopping master node...")
+            self._stop_http_server()
             stop_distribution_services()
         
         return 0
@@ -354,9 +416,13 @@ class DistributionCLI:
             # 启动服务
             start_distribution_services()
             
+            # 启动HTTP API服务器
+            self._start_http_server(config.master_host, config.master_port)
+            
             logger.info(f"Standalone node started")
             logger.info(f"Device ID: {config.device_id}")
             logger.info(f"Concurrent tasks: {config.concurrent_tasks}")
+            logger.info(f"HTTP API available at http://{config.master_host}:{config.master_port}/api/distribution/")
             
             # 设置信号处理
             self.setup_signal_handlers()
@@ -373,6 +439,7 @@ class DistributionCLI:
             return 1
         finally:
             logger.info("Stopping standalone node...")
+            self._stop_http_server()
             stop_distribution_services()
         
         return 0

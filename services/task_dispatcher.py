@@ -167,12 +167,12 @@ class TaskDispatcher:
             # 获取最新心跳信息
             heartbeat = DeviceHeartbeatDAO.get_latest_heartbeat(device['device_id'])
             if heartbeat:
-                cpu_usage = heartbeat.get('cpu_usage', 50) or 50
-                memory_usage = heartbeat.get('memory_usage', 50) or 50
+                cpu_usage = float(heartbeat.get('cpu_usage', 50) or 50)
+                memory_usage = float(heartbeat.get('memory_usage', 50) or 50)
                 # 权重 = 100 - (CPU使用率 + 内存使用率) / 2
-                weight = max(1, 100 - (cpu_usage + memory_usage) / 2)
+                weight = max(1.0, 100.0 - (cpu_usage + memory_usage) / 2.0)
             else:
-                weight = 50  # 默认权重
+                weight = 50.0  # 默认权重
             weights.append(weight)
         
         # 加权随机选择
@@ -180,8 +180,8 @@ class TaskDispatcher:
         if total_weight == 0:
             return devices[0]
         
-        rand_val = random.uniform(0, total_weight)
-        current_weight = 0
+        rand_val = random.uniform(0, float(total_weight))
+        current_weight = 0.0
         for i, weight in enumerate(weights):
             current_weight += weight
             if rand_val <= current_weight:
