@@ -60,6 +60,12 @@ class UserAppDAO:
         return mysql_pool.select(sql, (username,))
 
     @classmethod
+    def get_user_app(cls, username: str, app_id: str) -> List[Dict]:
+        cls.init_table()
+        sql = f"SELECT * FROM {cls.TABLE} WHERE username=%s AND app_id=%s"
+        return mysql_pool.select(sql, (username, app_id))
+
+    @classmethod
     def get_all_active(cls) -> List[Dict]:
         cls.init_table()
         sql = f"SELECT * FROM {cls.TABLE} WHERE app_status=0"

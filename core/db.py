@@ -45,13 +45,15 @@ class MySQLPool:
         rows = self.select(sql, params)
         return rows[0] if rows else None
 
-    def execute(self, sql: str, params: Tuple | Dict | None = None) -> None:
+    def execute(self, sql: str, params: Tuple | Dict | None = None) -> int:
         """单条写入 / 更新 / 删除"""
         conn = self.get_conn()
         try:
             cursor = conn.cursor()
             cursor.execute(sql, params or ())
+            affected_rows = cursor.rowcount
             conn.commit()
+            return affected_rows
         except Exception as e:
             conn.rollback()
             logger.exception("[MySQL] execute failed: %s", e)
@@ -78,4 +80,4 @@ class MySQLPool:
 
 # 单例
 mysql_pool = MySQLPool(MYSQL)
-report_mysql_pool = MySQLPool(REPORT_MYSQL)
+# report_mysql_pool = MySQLPool(REPORT_MYSQL)

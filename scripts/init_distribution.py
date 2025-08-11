@@ -117,7 +117,7 @@ def verify_installation():
     try:
         # 测试数据库连接
         from core.db import mysql_pool
-        with mysql_pool.get_connection() as conn:
+        with mysql_pool.get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
             result = cursor.fetchone()
@@ -133,7 +133,7 @@ def verify_installation():
             CrawlTaskDAO.TABLE
         ]
         
-        with mysql_pool.get_connection() as conn:
+        with mysql_pool.get_conn() as conn:
             cursor = conn.cursor()
             for table in tables_to_check:
                 cursor.execute(f"SHOW TABLES LIKE '{table}'")

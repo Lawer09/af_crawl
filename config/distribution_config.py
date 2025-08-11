@@ -5,6 +5,14 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
+# 延迟导入以避免循环依赖
+def _get_device_id_generator():
+    try:
+        from utils.device_id_generator import generate_device_id
+        return generate_device_id
+    except ImportError:
+        return None
+
 
 class DistributionMode(Enum):
     """分布式模式枚举"""
@@ -89,6 +97,13 @@ class DistributionConfig:
                 pass
         
         config.device_id = os.getenv('DEVICE_ID')
+        
+        # 如果device_id未设置且有模式信息，自动生成
+        if not config.device_id and config.mode:
+            generate_device_id = _get_device_id_generator()
+            if generate_device_id:
+                config.device_id = generate_device_id(config.mode.value)
+        
         config.device_name = os.getenv('DEVICE_NAME')
         config.device_type = os.getenv('DEVICE_TYPE', config.device_type)
         
@@ -317,6 +332,96 @@ class DistributionConfig:
             "auto_scaling": self.enable_auto_scaling,
             "task_priority": self.enable_task_priority
         }
+    
+    def save_to_file(self, config_path: str) -> None:
+        """保存配置到文件"""
+        import json
+        import os
+        
+        try:
+            # 验证配置
+            self.validate()
+            
+            # 确保目录存在
+            config_dir = os.path.dirname(config_path)
+            if config_dir and not os.path.exists(config_dir):
+                os.makedirs(config_dir, exist_ok=True)
+            
+            # 保存配置
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            raise ValueError(f"Failed to save config to {config_path}: {e}")
+    
+    @classmethod
+    def load_from_file(cls, config_path: str) -> 'DistributionConfig':
+        """从文件加载配置"""
+        import json
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_dict = json.load(f)
+            
+            config = cls.from_dict(config_dict)
+            config.validate()
+            
+            return config
+            
+        except Exception as e:
+            raise ValueError(f"Failed to load config from {config_path}: {e}")
+    
+    @classmethod
+    def get_master_template(cls, device_id: str = None, device_name: str = None, **kwargs) -> 'DistributionConfig':
+        """获取Master节点配置模板"""
+        template_dict = MASTER_CONFIG_TEMPLATE.copy()
+        
+        # 应用自定义参数
+        if device_id:
+            template_dict["device_id"] = device_id
+        if device_name:
+            template_dict["device_name"] = device_name
+        
+        # 应用额外的关键字参数
+        template_dict.update(kwargs)
+        
+        return cls.from_dict(template_dict)
+    
+    @classmethod
+    def get_worker_template(cls, device_id: str = None, device_name: str = None, master_host: str = None, master_port: int = None, **kwargs) -> 'DistributionConfig':
+        """获取Worker节点配置模板"""
+        template_dict = WORKER_CONFIG_TEMPLATE.copy()
+        
+        # 应用自定义参数
+        if device_id:
+            template_dict["device_id"] = device_id
+        if device_name:
+            template_dict["device_name"] = device_name
+        if master_host:
+            template_dict["master_host"] = master_host
+        if master_port:
+            template_dict["master_port"] = master_port
+        
+        # 应用额外的关键字参数
+        template_dict.update(kwargs)
+        
+        return cls.from_dict(template_dict)
+    
+    @classmethod
+    def get_standalone_template(cls, device_id: str = None, device_name: str = None, **kwargs) -> 'DistributionConfig':
+        """获取Standalone节点配置模板"""
+        template_dict = STANDALONE_CONFIG_TEMPLATE.copy()
+        
+        # 应用自定义参数
+        if device_id:
+            template_dict["device_id"] = device_id
+        if device_name:
+            template_dict["device_name"] = device_name
+        
+        # 应用额外的关键字参数
+        template_dict.update(kwargs)
+        
+        return cls.from_dict(template_dict)
 
 
 # 全局配置实例
@@ -380,13 +485,30 @@ MASTER_CONFIG_TEMPLATE = {
     "device_type": "master",
     "master_host": "localhost",
     "master_port": 8000,
+    "master_api_prefix": "/api/distribution",
     "dispatch_interval": 5,
     "heartbeat_interval": 30,
+    "task_timeout_check_interval": 60,
+    "device_timeout_threshold": 180,
     "load_balance_strategy": "least_tasks",
     "max_tasks_per_device": 10,
+    "task_retry_delay": 300,
+    "max_retry_count": 3,
+    "default_task_timeout": 3600,
+    "task_pull_limit": 10,
+    "concurrent_tasks": 5,
     "enable_performance_monitoring": True,
+    "heartbeat_data_retention_days": 7,
+    "assignment_data_retention_days": 30,
+    "enable_ssl": False,
     "enable_auto_scaling": True,
-    "enable_failover": True
+    "auto_scaling_threshold": 0.8,
+    "enable_task_priority": True,
+    "high_priority_threshold": 8,
+    "enable_failover": True,
+    "failover_timeout": 60,
+    "enable_task_redistribution": True,
+    "redistribution_delay": 120
 }
 
 WORKER_CONFIG_TEMPLATE = {
@@ -396,10 +518,23 @@ WORKER_CONFIG_TEMPLATE = {
     "device_type": "worker",
     "master_host": "localhost",
     "master_port": 8000,
+    "master_api_prefix": "/api/distribution",
     "heartbeat_interval": 30,
+    "max_tasks_per_device": 5,
+    "task_retry_delay": 300,
+    "max_retry_count": 3,
+    "default_task_timeout": 3600,
     "task_pull_limit": 5,
     "concurrent_tasks": 3,
-    "enable_performance_monitoring": True
+    "enable_performance_monitoring": True,
+    "heartbeat_data_retention_days": 7,
+    "assignment_data_retention_days": 30,
+    "enable_ssl": False,
+    "enable_auto_scaling": False,
+    "enable_task_priority": True,
+    "high_priority_threshold": 8,
+    "enable_failover": True,
+    "failover_timeout": 60
 }
 
 STANDALONE_CONFIG_TEMPLATE = {
@@ -407,9 +542,32 @@ STANDALONE_CONFIG_TEMPLATE = {
     "device_id": "standalone-001",
     "device_name": "Standalone Node",
     "device_type": "standalone",
+    "master_host": "localhost",
+    "master_port": 8000,
+    "master_api_prefix": "/api/distribution",
     "dispatch_interval": 10,
+    "heartbeat_interval": 30,
+    "task_timeout_check_interval": 60,
+    "device_timeout_threshold": 180,
+    "load_balance_strategy": "least_tasks",
+    "max_tasks_per_device": 5,
+    "task_retry_delay": 300,
+    "max_retry_count": 3,
+    "default_task_timeout": 3600,
+    "task_pull_limit": 5,
     "concurrent_tasks": 5,
-    "enable_performance_monitoring": False
+    "enable_performance_monitoring": False,
+    "heartbeat_data_retention_days": 7,
+    "assignment_data_retention_days": 30,
+    "enable_ssl": False,
+    "enable_auto_scaling": False,
+    "auto_scaling_threshold": 0.8,
+    "enable_task_priority": True,
+    "high_priority_threshold": 8,
+    "enable_failover": False,
+    "failover_timeout": 60,
+    "enable_task_redistribution": False,
+    "redistribution_delay": 120
 }
 
 
@@ -424,10 +582,32 @@ def create_config_template(mode: str, device_id: str = None, device_name: str = 
     else:
         raise ValueError(f"Unknown mode: {mode}")
     
+    # 处理device_id
     if device_id:
         template["device_id"] = device_id
+    else:
+        # 自动生成device_id
+        generate_device_id = _get_device_id_generator()
+        if generate_device_id:
+            template["device_id"] = generate_device_id(mode.lower())
     
+    # 处理device_name
     if device_name:
         template["device_name"] = device_name
+    elif not device_name and template.get("device_id"):
+        # 根据device_id和模式生成设备名称
+        device_id_val = template["device_id"]
+        if mode.lower() == 'master':
+            if 'datacenter' in device_id_val or 'dc' in device_id_val:
+                template["device_name"] = f"Master Node ({device_id_val.split('-')[-1]})"
+            else:
+                template["device_name"] = "Master Node"
+        elif mode.lower() == 'worker':
+            if 'server' in device_id_val:
+                template["device_name"] = f"Worker Node ({device_id_val.split('-')[-1]})"
+            else:
+                template["device_name"] = "Worker Node"
+        elif mode.lower() == 'standalone':
+            template["device_name"] = "Standalone Node"
     
     return template

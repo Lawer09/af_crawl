@@ -4,8 +4,9 @@ from __future__ import annotations
 $ python main.py sync_apps          # 同步用户 App 列表
 $ python main.py sync_data --days 7 # 同步最近 7 天数据
 $ python main.py web               # 启动Web管理界面
-$ python main.py distribute master --device-id master-001  # 启动分布式主节点
-$ python main.py distribute worker --device-id worker-001 --master-host localhost  # 启动分布式工作节点
+$ python main.py distribute master  # 启动分布式主节点
+$ python main.py distribute worker --master-host localhost --port 7989  # 启动分布式工作节点
+
 """
 
 import argparse
@@ -36,7 +37,7 @@ def _parse_args():
     
     # Master节点
     p_master = distribute_sub.add_parser("master", help="启动主节点")
-    p_master.add_argument("--device-id", required=True, help="设备ID")
+    p_master.add_argument("--device-id", help="设备ID（可选，未提供时自动生成）")
     p_master.add_argument("--device-name", help="设备名称")
     p_master.add_argument("--host", default="localhost", help="监听地址")
     p_master.add_argument("--port", type=int, default=7989, help="监听端口")
@@ -44,7 +45,7 @@ def _parse_args():
     
     # Worker节点
     p_worker = distribute_sub.add_parser("worker", help="启动工作节点")
-    p_worker.add_argument("--device-id", required=True, help="设备ID")
+    p_worker.add_argument("--device-id", help="设备ID（可选，未提供时自动生成）")
     p_worker.add_argument("--device-name", help="设备名称")
     p_worker.add_argument("--master-host", required=True, help="主节点地址")
     p_worker.add_argument("--master-port", type=int, default=7989, help="主节点端口")
@@ -52,8 +53,11 @@ def _parse_args():
     
     # Standalone节点
     p_standalone = distribute_sub.add_parser("standalone", help="启动独立节点")
-    p_standalone.add_argument("--device-id", required=True, help="设备ID")
+    p_standalone.add_argument("--device-id", help="设备ID（可选，未提供时自动生成）")
     p_standalone.add_argument("--device-name", help="设备名称")
+    p_standalone.add_argument("--dispatch-interval", type=int, default=10, help="任务分发间隔(秒)")
+    p_standalone.add_argument("--concurrent-tasks", type=int, default=5, help="并发任务数")
+    p_standalone.add_argument("--enable-monitoring", action="store_true", help="启用性能监控")
     p_standalone.add_argument("--config", help="配置文件路径")
     
     # 状态查询

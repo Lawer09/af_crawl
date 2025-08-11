@@ -19,9 +19,11 @@ class UserDAO:
         return mysql_pool.select(sql)
 
     @classmethod
-    def get_user(cls, email: str) -> Optional[Dict]:
+    def get_user_by_email(cls, email: str) -> Optional[Dict]:
+
         try:
-            rows = cls.select_sql("SELECT email, password, account_type FROM af_users WHERE email = %s", (email,))
+            rows = mysql_pool.select(f"SELECT email, password, account_type FROM {cls.TABLE} WHERE email = %s", (email,))
+
             if rows:
                 return rows[0]
             return None
@@ -45,4 +47,4 @@ class UserDAO:
         placeholders = ','.join(['%s'] * len(emails))
         sql = f"SELECT email, password, account_type FROM {cls.TABLE} WHERE email IN ({placeholders})"
         rows = mysql_pool.select(sql, tuple(emails))
-        return {row['email']: row for row in rows} 
+        return {row['email']: row for row in rows}

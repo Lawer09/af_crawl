@@ -36,6 +36,7 @@ from api.distribution_api import (
     init_distribution_services, start_distribution_services, stop_distribution_services
 )
 from services.task_scheduler import SchedulerMode
+from utils.device_id_generator import generate_device_id, validate_device_id
 
 # 配置日志
 logging.basicConfig(
@@ -52,6 +53,37 @@ class DistributionCLI:
         self.config: Optional[DistributionConfig] = None
         self.running = False
         self.shutdown_event = asyncio.Event()
+    
+    def _ensure_device_id(self, device_id: Optional[str], mode: str) -> str:
+        """确保device_id存在，如果没有则自动生成"""
+        if device_id:
+            # 验证提供的device_id
+            if not validate_device_id(device_id):
+                logger.warning(f"Invalid device_id format: {device_id}, generating a new one")
+                device_id = None
+            else:
+                logger.info(f"Using provided device_id: {device_id}")
+                return device_id
+        
+        # 自动生成device_id
+        generated_id = generate_device_id(mode)
+        logger.info(f"Auto-generated device_id for {mode} mode: {generated_id}")
+        return generated_id
+    
+    def _generate_device_name(self, device_id: str, mode: str) -> str:
+        """根据device_id和模式生成设备名称"""
+        if mode == 'master':
+            if 'datacenter' in device_id or 'dc' in device_id:
+                return f"Master Node ({device_id.split('-')[-1]})"
+            return "Master Node"
+        elif mode == 'worker':
+            if 'server' in device_id:
+                return f"Worker Node ({device_id.split('-')[-1]})"
+            return "Worker Node"
+        elif mode == 'standalone':
+            return "Standalone Node"
+        else:
+            return f"Device ({device_id})"
         
     def setup_signal_handlers(self):
         """设置信号处理器"""
@@ -87,10 +119,14 @@ class DistributionCLI:
         """运行主节点"""
         logger.info("Starting master node...")
         
+        # 确保device_id存在
+        device_id = self._ensure_device_id(args.device_id, "master")
+        device_name = args.device_name or self._generate_device_name(device_id, "master")
+        
         # 加载配置
         config_kwargs = {
             'mode': DistributionMode.MASTER,
-            'device_id': args.device_id,
+            'device_id': device_id,
             'device_name': args.device_name,
             'master_host': args.host,
             'master_port': args.port,
@@ -138,11 +174,15 @@ class DistributionCLI:
         """运行工作节点"""
         logger.info("Starting worker node...")
         
+        # 确保device_id存在
+        device_id = self._ensure_device_id(args.device_id, "worker")
+        device_name = args.device_name or self._generate_device_name(device_id, "worker")
+        
         # 加载配置
         config_kwargs = {
             'mode': DistributionMode.WORKER,
-            'device_id': args.device_id,
-            'device_name': args.device_name,
+            'device_id': device_id,
+            'device_name': device_name,
             'master_host': args.master_host,
             'master_port': args.master_port,
             'heartbeat_interval': args.heartbeat_interval,
@@ -335,11 +375,21 @@ class DistributionCLI:
     def generate_config(self, args):
         """生成配置文件"""
         try:
+            # 确保device_id存在
+            device_id = args.device_id
+            if args.mode and not device_id:
+                device_id = self._ensure_device_id(device_id, args.mode)
+            
+            # 生成设备名称（如果未提供）
+            device_name = args.device_name
+            if args.mode and not device_name:
+                device_name = self._generate_device_name(device_id, args.mode)
+            
             # 创建配置模板
             template = create_config_template(
                 mode=args.mode,
-                device_id=args.device_id,
-                device_name=args.device_name
+                device_id=device_id,
+                device_name=device_name
             )
             
             # 应用额外参数
@@ -425,10 +475,10 @@ def create_parser():
     
     # Master命令
     master_parser = subparsers.add_parser('master', help='启动主节点')
-    master_parser.add_argument('--device-id', required=True, help='设备ID')
+    master_parser.add_argument('--device-id', help='设备ID（可选，未提供时自动生成）')
     master_parser.add_argument('--device-name', help='设备名称')
     master_parser.add_argument('--host', default='localhost', help='监听地址')
-    master_parser.add_argument('--port', type=int, default=8000, help='监听端口')
+    master_parser.add_argument('--port', type=int, default=7989, help='监听端口')
     master_parser.add_argument('--dispatch-interval', type=int, default=10, help='任务分发间隔(秒)')
     master_parser.add_argument('--heartbeat-interval', type=int, default=30, help='心跳间隔(秒)')
     master_parser.add_argument('--load-balance-strategy', 
@@ -440,10 +490,10 @@ def create_parser():
     
     # Worker命令
     worker_parser = subparsers.add_parser('worker', help='启动工作节点')
-    worker_parser.add_argument('--device-id', required=True, help='设备ID')
+    worker_parser.add_argument('--device-id', help='设备ID（可选，未提供时自动生成）')
     worker_parser.add_argument('--device-name', help='设备名称')
     worker_parser.add_argument('--master-host', required=True, help='主节点地址')
-    worker_parser.add_argument('--master-port', type=int, default=8000, help='主节点端口')
+    worker_parser.add_argument('--master-port', type=int, default=7989, help='主节点端口')
     worker_parser.add_argument('--heartbeat-interval', type=int, default=30, help='心跳间隔(秒)')
     worker_parser.add_argument('--task-pull-limit', type=int, default=5, help='任务拉取限制')
     worker_parser.add_argument('--concurrent-tasks', type=int, default=3, help='并发任务数')
@@ -452,7 +502,7 @@ def create_parser():
     
     # Standalone命令
     standalone_parser = subparsers.add_parser('standalone', help='启动独立节点')
-    standalone_parser.add_argument('--device-id', required=True, help='设备ID')
+    standalone_parser.add_argument('--device-id', help='设备ID（可选，未提供时自动生成）')
     standalone_parser.add_argument('--device-name', help='设备名称')
     standalone_parser.add_argument('--dispatch-interval', type=int, default=10, help='任务分发间隔(秒)')
     standalone_parser.add_argument('--concurrent-tasks', type=int, default=5, help='并发任务数')
@@ -461,7 +511,7 @@ def create_parser():
     # Status命令
     status_parser = subparsers.add_parser('status', help='显示系统状态')
     status_parser.add_argument('--master-host', default='localhost', help='主节点地址')
-    status_parser.add_argument('--master-port', type=int, default=8000, help='主节点端口')
+    status_parser.add_argument('--master-port', type=int, default=7989, help='主节点端口')
     status_parser.add_argument('--api-key', help='API密钥')
     
     # Config命令
@@ -469,7 +519,7 @@ def create_parser():
     config_parser.add_argument('--mode', required=True, 
                               choices=['master', 'worker', 'standalone'],
                               help='运行模式')
-    config_parser.add_argument('--device-id', help='设备ID')
+    config_parser.add_argument('--device-id', help='设备ID（可选，未提供时根据模式自动生成）')
     config_parser.add_argument('--device-name', help='设备名称')
     config_parser.add_argument('--master-host', help='主节点地址')
     config_parser.add_argument('--master-port', type=int, help='主节点端口')
@@ -479,7 +529,7 @@ def create_parser():
     # Test命令
     test_parser = subparsers.add_parser('test', help='测试连接')
     test_parser.add_argument('--master-host', default='localhost', help='主节点地址')
-    test_parser.add_argument('--master-port', type=int, default=8000, help='主节点端口')
+    test_parser.add_argument('--master-port', type=int, default=7989, help='主节点端口')
     test_parser.add_argument('--api-key', help='API密钥')
     
     return parser

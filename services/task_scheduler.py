@@ -156,7 +156,7 @@ class TaskScheduler:
         """独立模式调度逻辑"""
         try:
             # 独立模式下，直接获取待执行任务并执行
-            pending_tasks = CrawlTaskDAO.fetch_pending('', limit=self.max_tasks_per_device)
+            pending_tasks = CrawlTaskDAO.get_assignable_tasks(limit=self.max_tasks_per_device)
             
             for task in pending_tasks:
                 # 标记任务为运行中

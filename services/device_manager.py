@@ -78,7 +78,7 @@ class DeviceManager:
         
         # 更新设备状态为离线
         try:
-            DeviceDAO.update_device_status(self.device_id, 'offline')
+            DeviceDAO.update_status(self.device_id, 'offline')
             logger.info("DeviceManager stopped")
         except Exception as e:
             logger.exception(f"Error updating device status on stop: {e}")
@@ -87,13 +87,18 @@ class DeviceManager:
         """注册设备"""
         try:
             device_info = self._get_device_info()
-            success = DeviceDAO.register_device(
-                device_id=self.device_id,
-                device_name=self.device_name,
-                device_type=device_info['device_type'],
-                ip_address=device_info['ip_address'],
-                capabilities=device_info['capabilities']
-            )
+            # 构建完整的设备信息字典
+            full_device_info = {
+                'device_id': self.device_id,
+                'device_name': self.device_name,
+                'device_type': device_info['device_type'],
+                'ip_address': device_info['ip_address'],
+                'port': device_info.get('port', 8080),
+                'capabilities': device_info['capabilities'],
+                'max_concurrent_tasks': device_info.get('max_concurrent_tasks', 5)
+            }
+            
+            success = DeviceDAO.register_device(full_device_info)
             
             if success:
                 logger.info(f"Device registered successfully: {self.device_id}")
@@ -273,7 +278,7 @@ class DeviceManager:
                 logger.warning(f"Device {device_id} is offline")
                 
                 # 更新设备状态
-                DeviceDAO.update_device_status(device_id, 'offline')
+                DeviceDAO.update_status(device_id, 'offline')
                 
                 # 释放设备的任务
                 released_count = CrawlTaskDAO.release_device_tasks(device_id)

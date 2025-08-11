@@ -133,7 +133,7 @@ class DeviceHeartbeatDAO:
             timeout_time = datetime.now() - timedelta(minutes=timeout_minutes)
             
             # 获取所有注册的设备
-            all_devices_sql = "SELECT device_id FROM af_device WHERE status = 'online'"
+            all_devices_sql = "SELECT device_id FROM cl_device WHERE status = 'online'"
             all_devices = mysql_pool.select(all_devices_sql)
             all_device_ids = [d['device_id'] for d in all_devices]
             
@@ -253,13 +253,18 @@ class DeviceHeartbeatDAO:
             WHERE heartbeat_time < %s
             """
             
-            cursor = mysql_pool.get_conn().cursor()
-            cursor.execute(sql, (cutoff_date,))
-            deleted_count = cursor.rowcount
-            cursor.close()
-            
-            logger.info(f"Cleaned up {deleted_count} old heartbeat records")
-            return deleted_count
+            conn = mysql_pool.get_conn()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(sql, (cutoff_date,))
+                deleted_count = cursor.rowcount
+                conn.commit()
+                
+                logger.info(f"Cleaned up {deleted_count} old heartbeat records")
+                return deleted_count
+            finally:
+                cursor.close()
+                conn.close()
             
         except Exception as e:
             logger.exception(f"Failed to cleanup old heartbeats: error={e}")

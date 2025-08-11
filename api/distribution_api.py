@@ -484,6 +484,56 @@ async def get_scheduler_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _register_task_executors(scheduler: TaskScheduler):
+    """注册任务执行器"""
+    try:
+        # 导入任务执行器
+        from executors.task_executor import get_task_executor
+        
+        # 获取分布式任务执行器
+        task_executor = get_task_executor()
+        
+        # 注册各种任务类型的执行器
+        def execute_user_apps_task(task):
+            """执行用户应用同步任务"""
+            return task_executor.execute_task_sync(
+                task_id=task['id'],
+                task_type=task['task_type'],
+                task_data={
+                    'username': task['username'],
+                    'app_id': task.get('app_id'),
+                    'start_date': task.get('start_date'),
+                    'end_date': task.get('end_date'),
+                    'task_data': task.get('task_data')
+                }
+            )
+        
+        def execute_data_sync_task(task):
+            """执行数据同步任务"""
+            return task_executor.execute_task_sync(
+                task_id=task['id'],
+                task_type=task['task_type'],
+                task_data={
+                    'username': task['username'],
+                    'app_id': task.get('app_id'),
+                    'start_date': task.get('start_date'),
+                    'end_date': task.get('end_date'),
+                    'task_data': task.get('task_data')
+                }
+            )
+        
+        # 注册执行器
+        scheduler.register_task_executor('user_apps', execute_user_apps_task)
+        scheduler.register_task_executor('app_sync', execute_user_apps_task)
+        scheduler.register_task_executor('data_sync', execute_data_sync_task)
+        
+        logger.info("Task executors registered successfully")
+        
+    except Exception as e:
+        logger.exception(f"Error registering task executors: {e}")
+        raise
+
+
 # 初始化函数
 def init_distribution_services(mode: str = "standalone", device_id: Optional[str] = None):
     """初始化分布式服务"""
@@ -505,6 +555,9 @@ def init_distribution_services(mode: str = "standalone", device_id: Optional[str
         
         # 初始化任务调度器
         _task_scheduler = TaskScheduler(mode=scheduler_mode)
+        
+        # 注册任务执行器
+        _register_task_executors(_task_scheduler)
         
         # 初始化设备管理器
         if device_id:

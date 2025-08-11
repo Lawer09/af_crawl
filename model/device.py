@@ -276,3 +276,57 @@ class DeviceDAO:
         except Exception as e:
             logger.exception(f"Failed to remove device {device_id}: {e}")
             return False
+    
+    @classmethod
+    def cleanup_timeout_devices(cls, timeout_seconds: int = 300) -> int:
+        """清理超时的设备
+        
+        Args:
+            timeout_seconds: 超时时间（秒），默认5分钟
+            
+        Returns:
+            int: 清理的设备数量
+        """
+        try:
+            current_time = datetime.now()
+            timeout_time = current_time - timedelta(seconds=timeout_seconds)
+            
+            # 获取超时的设备
+            timeout_devices = cls.get_timeout_devices(current_time, timeout_seconds)
+            
+            if not timeout_devices:
+                logger.debug("No timeout devices found")
+                return 0
+            
+            cleaned_count = 0
+            
+            for device in timeout_devices:
+                device_id = device['device_id']
+                
+                try:
+                    # 更新设备状态为离线
+                    cls.update_status(device_id, 'offline')
+                    
+                    # 重置设备任务计数
+                    sql = f"""
+                    UPDATE {cls.TABLE} 
+                    SET current_tasks = 0 
+                    WHERE device_id = %s
+                    """
+                    mysql_pool.execute(sql, (device_id,))
+                    
+                    logger.info(f"Cleaned up timeout device: {device_id}")
+                    cleaned_count += 1
+                    
+                except Exception as e:
+                    logger.exception(f"Failed to cleanup device {device_id}: {e}")
+                    continue
+            
+            if cleaned_count > 0:
+                logger.info(f"Cleaned up {cleaned_count} timeout devices")
+            
+            return cleaned_count
+            
+        except Exception as e:
+            logger.exception(f"Failed to cleanup timeout devices: {e}")
+            return 0

@@ -267,13 +267,18 @@ class TaskAssignmentDAO:
               AND completed_at < %s
             """
             
-            cursor = mysql_pool.get_conn().cursor()
-            cursor.execute(sql, (cutoff_date,))
-            deleted_count = cursor.rowcount
-            cursor.close()
-            
-            logger.info(f"Cleaned up {deleted_count} old assignment records")
-            return deleted_count
+            conn = mysql_pool.get_conn()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(sql, (cutoff_date,))
+                deleted_count = cursor.rowcount
+                conn.commit()
+                
+                logger.info(f"Cleaned up {deleted_count} old assignment records")
+                return deleted_count
+            finally:
+                cursor.close()
+                conn.close()
             
         except Exception as e:
             logger.exception(f"Failed to cleanup old assignments: error={e}")
