@@ -80,4 +80,4 @@ class MySQLPool:
 
 # 单例
 mysql_pool = MySQLPool(MYSQL)
-# report_mysql_pool = MySQLPool(REPORT_MYSQL)
+report_mysql_pool = MySQLPool(REPORT_MYSQL)
