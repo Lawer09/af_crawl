@@ -211,6 +211,27 @@ class DeviceDAO:
             return False
     
     @classmethod
+    def update_task_count(cls, device_id: str, task_count: int) -> bool:
+        """更新设备任务计数到指定值"""
+        try:
+            sql = f"""
+            UPDATE {cls.TABLE} 
+            SET current_tasks = %s,
+                status = CASE 
+                    WHEN %s >= max_concurrent_tasks THEN 'busy'
+                    WHEN %s = 0 THEN 'offline'
+                    ELSE 'online'
+                END,
+                updated_at = NOW()
+            WHERE device_id = %s
+            """
+            mysql_pool.execute(sql, (task_count, task_count, task_count, device_id))
+            return True
+        except Exception as e:
+            logger.exception(f"Failed to update task count for device {device_id}: {e}")
+            return False
+    
+    @classmethod
     def get_device_info(cls, device_id: str) -> Optional[Dict]:
         """获取设备信息"""
         try:

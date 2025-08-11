@@ -10,4 +10,4 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 调用主启动脚本
-exec "$SCRIPT_DIR/run_simple.sh" distribute worker "$@"
+exec sh "$SCRIPT_DIR/run_simple.sh" distribute worker "$@"
