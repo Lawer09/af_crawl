@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
+from model.device import DeviceDAO
 
 from core.db import mysql_pool
 
@@ -118,7 +119,7 @@ class DeviceHeartbeatDAO:
                 FROM {cls.TABLE}
                 GROUP BY device_id
             ) h2 ON h1.device_id = h2.device_id AND h1.heartbeat_time = h2.max_time
-            LEFT JOIN af_device d ON h1.device_id = d.device_id
+            LEFT JOIN {DeviceDAO.TABLE} d ON h1.device_id = d.device_id
             ORDER BY h1.heartbeat_time DESC
             """
             return mysql_pool.select(sql)

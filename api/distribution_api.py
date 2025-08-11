@@ -530,6 +530,7 @@ def _register_task_executors(scheduler: TaskScheduler):
         # 注册执行器
         scheduler.register_task_executor('user_apps', execute_user_apps_task)
         scheduler.register_task_executor('app_sync', execute_user_apps_task)
+        scheduler.register_task_executor('app_data', execute_user_apps_task)  # 添加app_data任务类型支持
         scheduler.register_task_executor('data_sync', execute_data_sync_task)
         
         logger.info("Task executors registered successfully")
