@@ -11,4 +11,4 @@ app.include_router(distribution_router)
 
 if __name__ == "__main__":
     config = get_distribution_config()
-    uvicorn.run(app, host="0.0.0.0", port=config.master_port)
+    uvicorn.run(app, host=config.master_host, port=config.master_port)
