@@ -1,228 +1,232 @@
 @echo off
-REM AppsFlyer 爬虫系统启动脚本 (Windows版本)
-REM 支持传统模式和分布式模式
+REM AppsFlyer crawl system startup script (Windows version)
+REM Supports traditional and distributed modes
 
 setlocal enabledelayedexpansion
 
-REM 配置项
+REM Configuration
 set "REPO_DIR=%~dp0"
 set "PYTHON_CMD=python"
 set "MAIN_SCRIPT=main.py"
 set "LOG_FILE=%REPO_DIR%run.log"
 
-REM 获取当前时间戳
+REM Get current timestamp
 for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
 set "LOG_TS=%dt:~0,4%-%dt:~4,2%-%dt:~6,2% %dt:~8,2%:%dt:~10,2%:%dt:~12,2%"
 
-echo [%LOG_TS%] === AppsFlyer 爬虫系统启动脚本 ===
+echo [%LOG_TS%] === AppsFlyer Crawl System Startup Script ===
 
-REM 切换到脚本目录
+REM Change to script directory
 cd /d "%REPO_DIR%" || (
-    echo [%LOG_TS%] 无法进入目录 %REPO_DIR%
+    echo [%LOG_TS%] Cannot enter directory %REPO_DIR%
     exit /b 1
 )
 
-REM 显示当前系统 Python 信息
-echo [%LOG_TS%] 检查Python环境...
+REM Display current system Python info
+echo [%LOG_TS%] Checking Python environment...
 where %PYTHON_CMD% >nul 2>&1 || (
-    echo [%LOG_TS%] 错误: 未找到Python，请确保Python已安装并添加到PATH
+    echo [%LOG_TS%] Error: Python not found, please ensure Python is installed and added to PATH
     pause
     exit /b 1
 )
 
-echo [%LOG_TS%] 当前系统 Python 路径:
+echo [%LOG_TS%] Current system Python path:
 where %PYTHON_CMD%
-echo [%LOG_TS%] 当前系统 Python 版本:
+echo [%LOG_TS%] Current system Python version:
 %PYTHON_CMD% --version
 
-REM 创建虚拟环境并安装依赖
+REM Create virtual environment and install dependencies
 if exist "requirements.txt" (
     if not exist "venv" (
-        echo [%LOG_TS%] 创建虚拟环境...
+        echo [%LOG_TS%] Creating virtual environment...
         %PYTHON_CMD% -m venv venv || (
-            echo 虚拟环境创建失败
+            echo Virtual environment creation failed
             pause
             exit /b 1
         )
     )
-    echo [%LOG_TS%] 激活虚拟环境并安装依赖...
+    echo [%LOG_TS%] Activating virtual environment and installing dependencies...
     call venv\Scripts\activate.bat
-    echo [%LOG_TS%] 当前虚拟环境 Python 版本:
+    echo [%LOG_TS%] Current virtual environment Python version:
     python --version
-    python -m pip install --upgrade pip
-    python -m pip install -r requirements.txt || echo [%LOG_TS%] 依赖安装失败
+    echo [%LOG_TS%] Installing dependencies...
+    pip install -r requirements.txt || (
+        echo Dependency installation failed
+        pause
+        exit /b 1
+    )
 ) else (
-    echo [%LOG_TS%] 未找到 requirements.txt，跳过依赖安装
+    echo [%LOG_TS%] requirements.txt not found, skipping dependency installation
 )
 
-REM 检查主程序
-if not exist "%MAIN_SCRIPT%" (
-    echo [%LOG_TS%] 主Python脚本 %MAIN_SCRIPT% 不存在
-    pause
-    exit /b 1
+REM Parameter validation
+if "%1"=="" (
+    echo [%LOG_TS%] No command specified, entering interactive mode
+    goto :interactive_mode
 )
 
-REM 显示使用帮助
-if "%1"=="--help" goto :show_help
 if "%1"=="-h" goto :show_help
-if "%1"=="/?" goto :show_help
+if "%1"=="--help" goto :show_help
+if "%1"=="help" goto :show_help
 
-REM 检查参数
-if "%1"=="" goto :interactive_mode
-
-REM 验证命令
-call :validate_command "%1" "%2"
-if errorlevel 1 (
-    echo.
-    echo 使用 %0 --help 查看完整帮助信息
-    pause
+REM Check parameters
+if "%1"=="sync_apps" (
+    set "cmd=sync_apps"
+    set "subcmd="
+) else if "%1"=="sync_data" (
+    set "cmd=sync_data"
+    set "subcmd="
+) else if "%1"=="web" (
+    set "cmd=web"
+    set "subcmd="
+) else if "%1"=="distribute" (
+    if "%2"=="" (
+        echo [%LOG_TS%] Error: distribute command requires subcommand
+        echo Available subcommands: master, worker, standalone, status
+        exit /b 1
+    )
+    if "%2"=="master" (
+        set "cmd=distribute"
+        set "subcmd=master"
+    ) else if "%2"=="worker" (
+        set "cmd=distribute"
+        set "subcmd=worker"
+    ) else if "%2"=="standalone" (
+        set "cmd=distribute"
+        set "subcmd=standalone"
+    ) else if "%2"=="status" (
+        set "cmd=distribute"
+        set "subcmd=status"
+    ) else (
+        echo [%LOG_TS%] Error: Invalid distribute subcommand: %2
+        echo Available subcommands: master, worker, standalone, status
+        exit /b 1
+    )
+) else (
+    echo [%LOG_TS%] Error: Invalid command: %1
+    echo Available commands: sync_apps, sync_data, web, distribute
     exit /b 1
 )
 
-REM 构建并执行Python命令
-call :execute_command %*
-exit /b %errorlevel%
+REM Build Python command
+set "python_command=%PYTHON_CMD% %MAIN_SCRIPT%"
+if not "%cmd%"=="" set "python_command=%python_command% %cmd%"
+if not "%subcmd%"=="" set "python_command=%python_command% %subcmd%"
 
-:show_help
-echo 使用方法: %0 ^<命令^> [参数...]
-echo.
-echo 支持的命令:
-echo   传统模式:
-echo     sync_apps                    - 同步用户 App 列表
-echo     sync_data [--days N]         - 同步最近 N 天数据（默认1天）
-echo     web                          - 启动Web管理界面
-echo.
-echo   分布式模式:
-echo     distribute master [选项]     - 启动分布式主节点
-echo     distribute worker [选项]     - 启动分布式工作节点
-echo     distribute standalone [选项] - 启动独立节点
-echo     distribute status [选项]     - 查看系统状态
-echo.
-echo   分布式选项:
-echo     --device-id ID              - 设备ID（可选，未提供时自动生成）
-echo     --device-name NAME          - 设备名称
-echo     --host HOST                 - 监听地址（master模式，默认localhost）
-echo     --port PORT                 - 监听端口（默认7989）
-echo     --master-host HOST          - 主节点地址（worker模式，必需）
-echo     --master-port PORT          - 主节点端口（worker模式，默认7989）
-echo     --dispatch-interval N       - 任务分发间隔秒数（standalone模式，默认10）
-echo     --concurrent-tasks N        - 并发任务数（standalone模式，默认5）
-echo     --enable-monitoring         - 启用性能监控（standalone模式）
-echo     --config FILE               - 配置文件路径
-echo.
-echo 示例:
-echo   %0 sync_apps
-echo   %0 sync_data --days 7
-echo   %0 web
-echo   %0 distribute master --device-id master-001 --port 7989
-echo   %0 distribute worker --device-id worker-001 --master-host 192.168.1.100
-echo   %0 distribute standalone --concurrent-tasks 3 --enable-monitoring
-echo   %0 distribute status --master-host 192.168.1.100
-pause
-exit /b 0
-
-:interactive_mode
-echo 请输入要执行的命令，或使用 --help 查看帮助:
-echo 可用命令: sync_apps, sync_data, web, distribute
-echo.
-set /p "CMD=请输入命令: "
-if "!CMD!"=="" (
-    echo 未输入命令，退出
-    pause
-    exit /b 1
-)
-REM 重新调用脚本
-call "%0" !CMD!
-exit /b %errorlevel%
-
-:validate_command
-set "cmd=%~1"
-set "subcmd=%~2"
-
-if "%cmd%"=="sync_apps" exit /b 0
-if "%cmd%"=="sync_data" exit /b 0
-if "%cmd%"=="web" exit /b 0
-
-if "%cmd%"=="distribute" (
-    if "%subcmd%"=="master" exit /b 0
-    if "%subcmd%"=="worker" exit /b 0
-    if "%subcmd%"=="standalone" exit /b 0
-    if "%subcmd%"=="status" exit /b 0
-    echo 错误: 无效的分布式子命令: %subcmd%
-    echo 有效的分布式子命令: master, worker, standalone, status
-    exit /b 1
+REM Add remaining parameters
+shift
+if not "%subcmd%"=="" shift
+:param_loop
+if not "%1"=="" (
+    set "python_command=%python_command% %1"
+    shift
+    goto :param_loop
 )
 
-echo 错误: 无效的命令: %cmd%
-echo 有效命令: sync_apps, sync_data, web, distribute
-exit /b 1
-
-:execute_command
-REM 获取当前时间戳
-for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-set "timestamp=%dt:~0,4%-%dt:~4,2%-%dt:~6,2% %dt:~8,2%:%dt:~10,2%:%dt:~12,2%"
-
-REM 构建Python命令
-set "python_command=python %MAIN_SCRIPT%"
-set "args=%*"
-set "python_command=%python_command% %args%"
-
-echo [%timestamp%] 启动命令: %python_command%
-echo [%timestamp%] 日志文件: %LOG_FILE%
-echo [%timestamp%] ===========================================
-
-REM 根据命令类型提供特定信息
-set "cmd=%1"
-set "subcmd=%2"
-
+REM Display command info
 if "%cmd%"=="sync_apps" (
-    echo [%timestamp%] 开始同步用户应用列表...
+    echo [%LOG_TS%] Starting sync_apps mode - Synchronizing user applications
 ) else if "%cmd%"=="sync_data" (
-    echo [%timestamp%] 开始同步应用数据...
+    echo [%LOG_TS%] Starting sync_data mode - Synchronizing application data
 ) else if "%cmd%"=="web" (
-    echo [%timestamp%] 启动Web管理界面...
-    echo [%timestamp%] 访问地址: http://localhost:8080
-) else if "%cmd%"=="distribute" (
-    if "%subcmd%"=="master" (
-        echo [%timestamp%] 启动分布式主节点...
-        echo [%timestamp%] 主节点将负责任务调度和分发
-    ) else if "%subcmd%"=="worker" (
-        echo [%timestamp%] 启动分布式工作节点...
-        echo [%timestamp%] 工作节点将连接到主节点执行任务
-    ) else if "%subcmd%"=="standalone" (
-        echo [%timestamp%] 启动独立节点...
-        echo [%timestamp%] 独立节点集成了主节点和工作节点功能
-    ) else if "%subcmd%"=="status" (
-        echo [%timestamp%] 查询系统状态...
+    echo [%LOG_TS%] Starting web mode - Web interface
+    echo [%LOG_TS%] Access address: http://localhost:8080
+) else if "%subcmd%"=="master" (
+    echo [%LOG_TS%] Starting distribute master mode - Distributed master node
+) else if "%subcmd%"=="worker" (
+    echo [%LOG_TS%] Starting distribute worker mode - Distributed worker node
+) else if "%subcmd%"=="standalone" (
+    echo [%LOG_TS%] Starting distribute standalone mode - Standalone distributed node
+) else if "%subcmd%"=="status" (
+    echo [%LOG_TS%] Checking distribute status - Distributed system status
+)
+
+REM Execute command and log output
+echo [%LOG_TS%] Executing command: %python_command%
+echo [%LOG_TS%] Command execution started >> "%LOG_FILE%"
+%python_command% 2>&1 | (
+    setlocal enabledelayedexpansion
+    for /f "delims=" %%i in ('findstr ".*"') do (
+        REM Get current timestamp and add to each line
+        for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+        set "LOG_TS=!dt:~0,4!-!dt:~4,2!-!dt:~6,2! !dt:~8,2!:!dt:~10,2!:!dt:~12,2!"
+        echo [!LOG_TS!] %%i
+        echo [!LOG_TS!] %%i >> "%LOG_FILE%"
     )
 )
 
-REM 执行Python命令并记录日志
-%python_command% 2>&1 | call :log_output
-
-set "exit_code=%errorlevel%"
-
-REM 获取结束时间戳
-for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-set "end_timestamp=%dt:~0,4%-%dt:~4,2%-%dt:~6,2% %dt:~8,2%:%dt:~10,2%:%dt:~12,2%"
-
-if %exit_code% equ 0 (
-    echo [%end_timestamp%] 命令执行完成
-) else (
-    echo [%end_timestamp%] 命令执行失败，退出码: %exit_code%
+set "exit_code=%ERRORLEVEL%"
+echo [%LOG_TS%] Command execution completed
+echo [%LOG_TS%] Exit code: %exit_code%
+echo [%LOG_TS%] Check results in log file: %LOG_FILE%
+if %exit_code% neq 0 (
+    echo [%LOG_TS%] Command execution failed, please check log for details
+    pause
 )
-
-REM 如果不是后台运行，暂停以查看结果
-if not "%NOPAUSE%"=="1" pause
-
 exit /b %exit_code%
 
-:log_output
-REM 读取管道输入并添加时间戳
-for /f "delims=" %%i in ('more') do (
-    for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-    set "log_ts=!dt:~0,4!-!dt:~4,2!-!dt:~6,2! !dt:~8,2!:!dt:~10,2!:!dt:~12,2!"
-    echo [!log_ts!] %%i
-    echo [!log_ts!] %%i >> "%LOG_FILE%"
+:interactive_mode
+echo Please enter the command to execute, or use -h to view help:
+echo Available commands: sync_apps, sync_data, web, distribute
+echo.
+set /p "user_input=Please enter command: "
+if "%user_input%"=="" (
+    echo No command entered, exiting
+    exit /b 0
 )
+if "%user_input%"=="-h" goto :show_help
+if "%user_input%"=="--help" goto :show_help
+if "%user_input%"=="help" goto :show_help
+if "%user_input%"=="exit" exit /b 0
+if "%user_input%"=="quit" exit /b 0
+
+REM Parse user input and re-execute script
+echo [%LOG_TS%] Executing user command: %user_input%
+call "%~f0" %user_input%
+exit /b %ERRORLEVEL%
+
+:show_help
+echo.
+echo AppsFlyer Crawl System Startup Script
+echo.
+echo Usage:
+echo   %~nx0 [COMMAND] [OPTIONS]
+echo.
+echo Traditional Commands:
+echo   sync_apps          Synchronize user applications
+echo   sync_data          Synchronize application data
+echo   web                Start web interface (http://localhost:8080)
+echo.
+echo Distributed Commands:
+echo   distribute master [OPTIONS]     Start distributed master node
+echo   distribute worker [OPTIONS]     Start distributed worker node
+echo   distribute standalone [OPTIONS] Start standalone distributed node
+echo   distribute status [OPTIONS]     Check distributed system status
+echo.
+echo Distributed Master Options:
+echo   --port PORT                     Master service port (default: 7989)
+echo   --device-name NAME              Device name
+echo   --config CONFIG_FILE            Configuration file path
+echo.
+echo Distributed Worker Options:
+echo   --master-host HOST              Master node host address (required)
+echo   --master-port PORT              Master node port (default: 7989)
+echo   --device-name NAME              Device name
+echo   --config CONFIG_FILE            Configuration file path
+echo.
+echo Distributed Standalone Options:
+echo   --device-name NAME              Device name
+echo   --config CONFIG_FILE            Configuration file path
+echo.
+echo General Options:
+echo   -h, --help, help               Show this help message
+echo.
+echo Examples:
+echo   %~nx0 sync_apps
+echo   %~nx0 web
+echo   %~nx0 distribute master --port 7989
+echo   %~nx0 distribute worker --master-host localhost
+echo   %~nx0 distribute standalone
+echo   %~nx0 distribute status
+echo.
 exit /b 0

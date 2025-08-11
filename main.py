@@ -46,8 +46,13 @@ def _parse_args():
     p_worker = distribute_sub.add_parser("worker", help="启动工作节点")
     p_worker.add_argument("--device-id", help="设备ID（可选，未提供时自动生成）")
     p_worker.add_argument("--device-name", help="设备名称")
-    p_worker.add_argument("--master-host", required=True, help="主节点地址")
+    p_worker.add_argument("--master-host", help="主节点地址（可选，未提供时从配置文件读取）")
     p_worker.add_argument("--master-port", type=int, default=7989, help="主节点端口")
+    p_worker.add_argument("--heartbeat-interval", type=int, default=30, help="心跳间隔(秒)")
+    p_worker.add_argument("--task-pull-limit", type=int, default=5, help="任务拉取限制")
+    p_worker.add_argument("--concurrent-tasks", type=int, default=3, help="并发任务数")
+    p_worker.add_argument("--enable-monitoring", action="store_true", help="启用性能监控")
+    p_worker.add_argument("--api-key", help="API密钥")
     p_worker.add_argument("--config", help="配置文件路径")
     
     # Standalone节点

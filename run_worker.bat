@@ -1,11 +1,11 @@
 @echo off
-REM AppsFlyer 爬虫系统 - 分布式工作节点启动脚本
-REM 快捷启动工作节点模式
+REM AppsFlyer crawl system - Distributed worker node startup script
+REM Quick start worker node mode
 
 setlocal enabledelayedexpansion
 
-REM 获取脚本所在目录
+REM Get script directory
 set "SCRIPT_DIR=%~dp0"
 
-REM 调用主启动脚本
+REM Call main startup script
 call "%SCRIPT_DIR%run.bat" distribute worker %*

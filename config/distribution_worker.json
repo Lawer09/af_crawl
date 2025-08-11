@@ -3,7 +3,7 @@
   "device_id": "worker-001",
   "device_name": "Worker Node 1",
   "device_type": "worker",
-  "master_host": "localhost",
+  "master_host": "8.221.118.78",
   "master_port": 7989,
   "master_api_prefix": "/api/distribution",
   "dispatch_interval": 10,

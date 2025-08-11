@@ -115,6 +115,29 @@ class DistributionCLI:
         self.config = config
         return config
     
+    def _load_config_with_defaults(self, args, mode: str, config_kwargs: dict) -> DistributionConfig:
+        """加载配置文件并应用默认值"""
+        if args.config:
+            config = self.load_config(args.config)
+        else:
+            # 尝试加载默认的配置文件
+            default_config_path = os.path.join(os.path.dirname(__file__), '..', 'config', f'distribution_{mode}.json')
+            if os.path.exists(default_config_path):
+                config = self.load_config(default_config_path)
+            else:
+                config = self.load_config()
+        
+        # 应用命令行参数覆盖配置
+        for key, value in config_kwargs.items():
+            if value is not None and hasattr(config, key):
+                setattr(config, key, value)
+        
+        # 验证配置
+        config.validate()
+        set_distribution_config(config)
+        self.config = config
+        return config
+    
     def run_master(self, args):
         """运行主节点"""
         logger.info("Starting master node...")
@@ -123,22 +146,32 @@ class DistributionCLI:
         device_id = self._ensure_device_id(args.device_id, "master")
         device_name = args.device_name or self._generate_device_name(device_id, "master")
         
-        # 加载配置
+        # 准备配置参数（只传递非None的值）
         config_kwargs = {
             'mode': DistributionMode.MASTER,
             'device_id': device_id,
-            'device_name': args.device_name,
-            'master_host': args.host,
-            'master_port': args.port,
-            'dispatch_interval': args.dispatch_interval,
-            'heartbeat_interval': args.heartbeat_interval,
-            'load_balance_strategy': LoadBalanceStrategy(args.load_balance_strategy) if args.load_balance_strategy else None,
-            'max_tasks_per_device': args.max_tasks_per_device,
-            'enable_performance_monitoring': args.enable_monitoring,
-            'api_key': args.api_key
+            'device_name': device_name
         }
         
-        config = self.load_config(args.config, **config_kwargs)
+        # 只有当命令行提供了参数时才覆盖配置文件
+        if hasattr(args, 'host') and args.host != 'localhost':  # 如果不是默认值
+            config_kwargs['master_host'] = args.host
+        if hasattr(args, 'port') and args.port != 7989:  # 如果不是默认值
+            config_kwargs['master_port'] = args.port
+        if hasattr(args, 'dispatch_interval') and args.dispatch_interval != 10:
+            config_kwargs['dispatch_interval'] = args.dispatch_interval
+        if hasattr(args, 'heartbeat_interval') and args.heartbeat_interval != 30:
+            config_kwargs['heartbeat_interval'] = args.heartbeat_interval
+        if hasattr(args, 'load_balance_strategy') and args.load_balance_strategy != 'least_tasks':
+            config_kwargs['load_balance_strategy'] = LoadBalanceStrategy(args.load_balance_strategy)
+        if hasattr(args, 'max_tasks_per_device') and args.max_tasks_per_device != 5:
+            config_kwargs['max_tasks_per_device'] = args.max_tasks_per_device
+        if hasattr(args, 'enable_monitoring') and args.enable_monitoring:
+            config_kwargs['enable_performance_monitoring'] = args.enable_monitoring
+        if hasattr(args, 'api_key') and args.api_key:
+            config_kwargs['api_key'] = args.api_key
+        
+        config = self._load_config_with_defaults(args, "master", config_kwargs)
         
         try:
             # 初始化服务
@@ -178,12 +211,29 @@ class DistributionCLI:
         device_id = self._ensure_device_id(args.device_id, "worker")
         device_name = args.device_name or self._generate_device_name(device_id, "worker")
         
-        # 加载配置
+        # 首先加载配置文件以获取默认值
+        if args.config:
+            config = self.load_config(args.config)
+        else:
+            # 尝试加载默认的worker配置文件
+            default_config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'distribution_worker.json')
+            if os.path.exists(default_config_path):
+                config = self.load_config(default_config_path)
+            else:
+                config = self.load_config()
+        
+        # 如果命令行未提供master_host，使用配置文件中的值
+        master_host = args.master_host if args.master_host else getattr(config, 'master_host', None)
+        if not master_host:
+            logger.error("master_host未配置，请在命令行指定--master-host或在配置文件中设置master_host")
+            return 1
+        
+        # 应用命令行参数覆盖配置
         config_kwargs = {
             'mode': DistributionMode.WORKER,
             'device_id': device_id,
             'device_name': device_name,
-            'master_host': args.master_host,
+            'master_host': master_host,
             'master_port': args.master_port,
             'heartbeat_interval': args.heartbeat_interval,
             'task_pull_limit': args.task_pull_limit,
@@ -192,7 +242,15 @@ class DistributionCLI:
             'api_key': args.api_key
         }
         
-        config = self.load_config(args.config, **config_kwargs)
+        # 重新应用配置覆盖
+        for key, value in config_kwargs.items():
+            if value is not None and hasattr(config, key):
+                setattr(config, key, value)
+        
+        # 验证配置
+        config.validate()
+        set_distribution_config(config)
+        self.config = config
         
         try:
             # 初始化服务
@@ -268,17 +326,26 @@ class DistributionCLI:
         """运行独立节点"""
         logger.info("Starting standalone node...")
         
-        # 加载配置
+        # 确保device_id存在
+        device_id = self._ensure_device_id(args.device_id, "standalone")
+        device_name = args.device_name or self._generate_device_name(device_id, "standalone")
+        
+        # 准备配置参数（只传递非None的值）
         config_kwargs = {
             'mode': DistributionMode.STANDALONE,
-            'device_id': args.device_id,
-            'device_name': args.device_name,
-            'dispatch_interval': args.dispatch_interval,
-            'concurrent_tasks': args.concurrent_tasks,
-            'enable_performance_monitoring': args.enable_monitoring
+            'device_id': device_id,
+            'device_name': device_name
         }
         
-        config = self.load_config(args.config, **config_kwargs)
+        # 只有当命令行提供了参数时才覆盖配置文件
+        if hasattr(args, 'dispatch_interval') and args.dispatch_interval != 10:
+            config_kwargs['dispatch_interval'] = args.dispatch_interval
+        if hasattr(args, 'concurrent_tasks') and args.concurrent_tasks != 5:
+            config_kwargs['concurrent_tasks'] = args.concurrent_tasks
+        if hasattr(args, 'enable_monitoring') and args.enable_monitoring:
+            config_kwargs['enable_performance_monitoring'] = args.enable_monitoring
+        
+        config = self._load_config_with_defaults(args, "standalone", config_kwargs)
         
         try:
             # 初始化服务
@@ -492,7 +559,7 @@ def create_parser():
     worker_parser = subparsers.add_parser('worker', help='启动工作节点')
     worker_parser.add_argument('--device-id', help='设备ID（可选，未提供时自动生成）')
     worker_parser.add_argument('--device-name', help='设备名称')
-    worker_parser.add_argument('--master-host', required=True, help='主节点地址')
+    worker_parser.add_argument('--master-host', help='主节点地址（可选，未提供时从配置文件读取）')
     worker_parser.add_argument('--master-port', type=int, default=7989, help='主节点端口')
     worker_parser.add_argument('--heartbeat-interval', type=int, default=30, help='心跳间隔(秒)')
     worker_parser.add_argument('--task-pull-limit', type=int, default=5, help='任务拉取限制')
