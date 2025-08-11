@@ -133,6 +133,23 @@ class CrawlTaskDAO:
             f"UPDATE {cls.TABLE} SET status='pending', assigned_device_id=NULL, assigned_at=NULL WHERE status='failed'"
         )
     
+    @classmethod
+    def reset_task_for_retry(cls, task_id: int) -> bool:
+        """重置任务为待分配状态，用于重试"""
+        try:
+            sql = f"""
+            UPDATE {cls.TABLE} 
+            SET status='pending', assigned_device_id=NULL, assigned_at=NULL, 
+                next_run_at=NOW(), updated_at=NOW()
+            WHERE id=%s
+            """
+            result = mysql_pool.execute(sql, (task_id,))
+            logger.info(f"Task {task_id} reset for retry")
+            return result > 0
+        except Exception as e:
+            logger.exception(f"Failed to reset task for retry: task_id={task_id}, error={e}")
+            return False
+    
     # ---------- 分布式任务相关方法 ----------
     @classmethod
     def assign_task(cls, task_id: int, device_id: str) -> bool:

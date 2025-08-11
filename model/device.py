@@ -132,7 +132,7 @@ class DeviceDAO:
             WHERE status IN ('online', 'busy') 
               AND device_type = 'worker'
               AND current_tasks < max_concurrent_tasks
-              AND last_heartbeat > DATE_SUB(NOW(), INTERVAL 120 SECOND)
+              AND last_heartbeat > DATE_SUB(NOW(), INTERVAL 90 SECOND)
             ORDER BY current_tasks ASC, last_heartbeat DESC
             """
             
@@ -255,6 +255,79 @@ class DeviceDAO:
         except Exception as e:
             logger.exception(f"Failed to get device info for {device_id}: {e}")
             return None
+    
+    @classmethod
+    def get_device(cls, device_id: str) -> Optional[Dict]:
+        """获取设备详情（别名方法）"""
+        return cls.get_device_info(device_id)
+    
+    @classmethod
+    def get_devices_by_status(cls, status: str) -> List[Dict]:
+        """根据状态获取设备列表"""
+        try:
+            sql = f"""
+            SELECT device_id, device_name, device_type, ip_address, port,
+                   capabilities, max_concurrent_tasks, current_tasks, status,
+                   last_heartbeat, created_at, updated_at
+            FROM {cls.TABLE}
+            WHERE status = %s
+            ORDER BY device_type, device_name
+            """
+            
+            devices = mysql_pool.select(sql, (status,))
+            
+            # 解析 capabilities JSON
+            for device in devices:
+                if device['capabilities']:
+                    try:
+                        device['capabilities'] = json.loads(device['capabilities'])
+                    except json.JSONDecodeError:
+                        device['capabilities'] = {}
+                else:
+                    device['capabilities'] = {}
+            
+            return devices
+            
+        except Exception as e:
+            logger.exception(f"Failed to get devices by status {status}: {e}")
+            return []
+    
+    @classmethod
+    def update_device_status(cls, device_id: str, status: str) -> bool:
+        """更新设备状态（别名方法）"""
+        return cls.update_status(device_id, status)
+    
+    @classmethod
+    def update_device_info(cls, device_id: str, **kwargs) -> bool:
+        """更新设备信息"""
+        try:
+            # 构建更新字段
+            update_fields = []
+            update_values = []
+            
+            for field, value in kwargs.items():
+                if field == 'capabilities' and isinstance(value, dict):
+                    update_fields.append(f"{field} = %s")
+                    update_values.append(json.dumps(value))
+                elif field in ['device_name', 'device_type', 'ip_address', 'port', 'max_concurrent_tasks']:
+                    update_fields.append(f"{field} = %s")
+                    update_values.append(value)
+            
+            if not update_fields:
+                return True
+            
+            update_fields.append("updated_at = NOW()")
+            update_values.append(device_id)
+            
+            sql = f"UPDATE {cls.TABLE} SET {', '.join(update_fields)} WHERE device_id = %s"
+            mysql_pool.execute(sql, update_values)
+            
+            logger.info(f"Device info updated: {device_id}")
+            return True
+            
+        except Exception as e:
+            logger.exception(f"Failed to update device info {device_id}: {e}")
+            return False
     
     @classmethod
     def get_all_devices(cls) -> List[Dict]:

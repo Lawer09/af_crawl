@@ -200,6 +200,15 @@ class TaskDispatcher:
             task_id = task['id']
             device_id = device['device_id']
             
+            # 实时检查设备状态
+            current_device = DeviceDAO.get_device(device_id)
+            if not current_device or current_device['status'] not in ['online', 'busy']:
+                logger.warning(f"Device {device_id} is no longer available, status: {current_device['status'] if current_device else 'not found'}")
+                # 立即将设备标记为离线
+                if current_device:
+                    DeviceDAO.update_status(device_id, 'offline')
+                return False
+            
             # 更新任务状态为已分配
             if CrawlTaskDAO.assign_task(task_id, device_id):
                 # 创建任务分配记录
@@ -212,7 +221,9 @@ class TaskDispatcher:
                 else:
                     # 回滚任务状态
                     CrawlTaskDAO.release_device_tasks(device_id)
-                    logger.error(f"Failed to create assignment record for task {task_id}")
+                    logger.error(f"Failed to create assignment record for task {task_id}, task will be retried")
+                    # 将任务重新标记为待分配
+                    CrawlTaskDAO.reset_task_for_retry(task_id)
             
             return False
             

@@ -262,7 +262,7 @@ class DeviceManager:
             try:
                 self._monitor_offline_devices()
                 self._cleanup_old_data()
-                time.sleep(60)  # 每分钟检查一次
+                time.sleep(60)  # 每60秒检查一次，更快检测离线设备
             except Exception as e:
                 logger.exception(f"Error in monitor loop: {e}")
                 time.sleep(10)
