@@ -4,6 +4,7 @@ import logging
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from model.crawl_task import CrawlTaskDAO
+from model.device import DeviceDAO
 
 from core.db import mysql_pool
 
@@ -212,7 +213,7 @@ class TaskAssignmentDAO:
                    ta.completed_at, ta.status, ta.retry_count, ta.error_message,
                    d.device_name, d.device_type
             FROM {cls.TABLE} ta
-            LEFT JOIN af_device d ON ta.device_id = d.device_id
+            LEFT JOIN {DeviceDAO.TABLE} d ON ta.device_id = d.device_id
             WHERE ta.task_id = %s
             ORDER BY ta.assigned_at DESC
             """
