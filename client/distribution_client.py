@@ -503,6 +503,126 @@ class AsyncDistributionClient:
         else:
             return False
     
+    async def update_device_status(self, status: str) -> bool:
+        """异步更新设备状态"""
+        if not self.device_id:
+            return False
+        
+        result = await self._make_request("PUT", f"/devices/{self.device_id}/status", json=status)
+        
+        return result and result.get("status") == "success"
+    
+    async def get_device_info(self, device_id: str = None) -> Optional[Dict]:
+        """异步获取设备信息"""
+        target_device_id = device_id or self.device_id
+        if not target_device_id:
+            return None
+        
+        return await self._make_request("GET", f"/devices/{target_device_id}")
+    
+    async def get_all_devices(self, status: str = None) -> List[Dict]:
+        """异步获取所有设备"""
+        params = {"status": status} if status else {}
+        result = await self._make_request("GET", "/devices", params=params)
+        
+        if result:
+            return result.get("devices", [])
+        else:
+            return []
+    
+    async def create_task(self, task_type: str, username: str, app_id: str = None,
+                         start_date: str = None, end_date: str = None, priority: int = 0,
+                         task_data: Dict = None, execution_timeout: int = None,
+                         max_retry_count: int = None) -> bool:
+        """异步创建任务"""
+        data = {
+            "task_type": task_type,
+            "username": username,
+            "app_id": app_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "priority": priority,
+            "task_data": task_data,
+            "execution_timeout": execution_timeout or self.config.default_task_timeout,
+            "max_retry_count": max_retry_count or self.config.max_retry_count
+        }
+        
+        result = await self._make_request("POST", "/tasks", json=data)
+        
+        return result and result.get("status") == "success"
+    
+    async def get_tasks(self, status: str = None, task_type: str = None, 
+                       device_id: str = None, limit: int = 100) -> List[Dict]:
+        """异步获取任务列表"""
+        params = {
+            "status": status,
+            "task_type": task_type,
+            "device_id": device_id,
+            "limit": limit
+        }
+        
+        # 移除None值
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        result = await self._make_request("GET", "/tasks", params=params)
+        
+        if result:
+            return result.get("tasks", [])
+        else:
+            return []
+    
+    async def get_task_details(self, task_id: int) -> Optional[Dict]:
+        """异步获取任务详情"""
+        return await self._make_request("GET", f"/tasks/{task_id}")
+    
+    async def assign_task(self, task_id: int, device_id: str) -> bool:
+        """异步手动分配任务"""
+        data = {
+            "task_id": task_id,
+            "device_id": device_id
+        }
+        
+        result = await self._make_request("POST", "/tasks/assign", json=data)
+        
+        return result and result.get("status") == "success"
+    
+    async def get_system_overview(self) -> Optional[Dict]:
+        """异步获取系统概览"""
+        return await self._make_request("GET", "/stats/overview")
+    
+    async def get_device_stats(self) -> Optional[Dict]:
+        """异步获取设备统计"""
+        return await self._make_request("GET", "/stats/devices")
+    
+    async def get_device_performance(self, device_id: str = None, hours: int = 24) -> Optional[Dict]:
+        """异步获取设备性能数据"""
+        target_device_id = device_id or self.device_id
+        if not target_device_id:
+            return None
+        
+        params = {"hours": hours}
+        return await self._make_request("GET", f"/stats/devices/{target_device_id}/performance", params=params)
+    
+    async def rebalance_tasks(self) -> Optional[Dict]:
+        """异步重新平衡任务"""
+        return await self._make_request("POST", "/management/rebalance")
+    
+    async def cleanup_old_data(self, days: int = 7) -> Optional[Dict]:
+        """异步清理旧数据"""
+        return await self._make_request("POST", "/management/cleanup", json=days)
+    
+    async def get_scheduler_status(self) -> Optional[Dict]:
+        """异步获取调度器状态"""
+        return await self._make_request("GET", "/management/scheduler/status")
+    
+    def is_connected(self) -> bool:
+        """检查是否连接到主节点"""
+        return self.connected
+    
+    async def close(self):
+        """关闭异步客户端"""
+        await self.stop_heartbeat()
+    
     async def pull_tasks(self, limit: int = None) -> List[Dict]:
         """异步拉取任务"""
         if not self.device_id:
