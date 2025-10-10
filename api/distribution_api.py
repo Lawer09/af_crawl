@@ -492,13 +492,13 @@ async def get_scheduler_status():
 def _register_task_executors(scheduler: TaskScheduler):
     """注册任务执行器"""
     try:
-        # 导入任务执行器
+        # 导入全局任务执行器
         from executors.task_executor import get_task_executor
         
-        # 获取分布式任务执行器
+        # 获取全局分布式任务执行器
         task_executor = get_task_executor()
         
-        # 注册各种任务类型的执行器
+        # 封装全局任务执行，接受task参数
         def execute_user_apps_task(task):
             """执行用户应用同步任务"""
             return task_executor.execute_task_sync(
@@ -529,9 +529,7 @@ def _register_task_executors(scheduler: TaskScheduler):
         
         # 注册执行器
         scheduler.register_task_executor('user_apps', execute_user_apps_task)
-        scheduler.register_task_executor('app_sync', execute_user_apps_task)
-        scheduler.register_task_executor('app_data', execute_user_apps_task)  # 添加app_data任务类型支持
-        scheduler.register_task_executor('data_sync', execute_data_sync_task)
+        scheduler.register_task_executor('app_data', execute_data_sync_task)  # 添加app_data任务类型支持
         
         logger.info("Task executors registered successfully")
         
@@ -543,14 +541,11 @@ def _register_task_executors(scheduler: TaskScheduler):
 # 初始化函数
 def init_distribution_services(mode: str = "standalone", device_id: Optional[str] = None):
     """初始化分布式服务"""
+
+     # api中的全局任务和设备管理，实际上会调executors全局任务执行器注册的方法
     global _task_scheduler, _device_manager
     
     try:
-        # 初始化数据库表
-        DeviceDAO.init_table()
-        TaskAssignmentDAO.init_table()
-        DeviceHeartbeatDAO.init_table()
-        
         # 确定调度器模式
         if mode.lower() == "master":
             scheduler_mode = SchedulerMode.MASTER
@@ -580,6 +575,8 @@ def init_distribution_services(mode: str = "standalone", device_id: Optional[str
 
 def start_distribution_services():
     """启动分布式服务"""
+
+    # api中的全局任务和设备管理
     global _task_scheduler, _device_manager
     
     try:
@@ -598,6 +595,7 @@ def start_distribution_services():
 
 def stop_distribution_services():
     """停止分布式服务"""
+
     global _task_scheduler, _device_manager
     
     try:

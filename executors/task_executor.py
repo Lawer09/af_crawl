@@ -86,47 +86,11 @@ class UserAppsTaskExecutor(TaskExecutor):
             }
 
 
-class AppSyncTaskExecutor(TaskExecutor):
-    """App同步任务执行器"""
+class AppDataSyncTaskExecutor(TaskExecutor):
+    """App数据同步任务执行器"""
     
     def __init__(self):
         super().__init__("app_data")
-    
-    def execute_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
-        """执行App同步任务"""
-        try:
-            username = task_data.get('username')
-            if not username:
-                raise ValueError("Missing username in task data")
-            
-            logger.info(f"Executing app sync task for user: {username}")
-            
-            # 导入并执行同步任务
-            from tasks.sync_user_apps import sync_user_apps
-            
-            result = sync_user_apps(username)
-            
-            return {
-                "status": "success",
-                "username": username,
-                "synced_apps": result.get('synced_apps', 0),
-                "execution_time": result.get('execution_time', 0)
-            }
-            
-        except Exception as e:
-            logger.exception(f"Error executing app sync task: {e}")
-            return {
-                "status": "error",
-                "error_message": str(e),
-                "error_type": type(e).__name__
-            }
-
-
-class DataSyncTaskExecutor(TaskExecutor):
-    """数据同步任务执行器"""
-    
-    def __init__(self):
-        super().__init__("data_sync")
     
     def execute_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """执行数据同步任务"""
@@ -182,8 +146,7 @@ class DistributedTaskExecutor:
         
         # 注册默认执行器
         self.register_executor(UserAppsTaskExecutor())
-        self.register_executor(AppSyncTaskExecutor())
-        self.register_executor(DataSyncTaskExecutor())
+        self.register_executor(AppDataSyncTaskExecutor())
         
         # 分布式客户端
         self.client = None

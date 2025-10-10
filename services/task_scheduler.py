@@ -117,11 +117,11 @@ class TaskScheduler:
             # 主节点主要负责任务分发，具体执行由TaskDispatcher处理
             # 这里可以添加一些高级调度逻辑
             
-            # 检查系统负载并调整分发策略
-            self._adjust_dispatch_strategy()
+            # 检查系统负载并调整分发策略 暂时不使用，减少数据库查询操作
+            # self._adjust_dispatch_strategy()
             
-            # 处理优先级任务
-            self._handle_priority_tasks()
+            # 处理优先级任务 暂时不使用
+            # self._handle_priority_tasks()
             
             # 监控任务执行情况
             self._monitor_task_execution()
@@ -133,7 +133,6 @@ class TaskScheduler:
         """工作节点调度逻辑"""
         try:
             # 获取分配给当前设备的任务
-            from services.device_manager import DeviceManager
             # 这里需要获取当前设备ID，可以从配置或环境变量获取
             device_id = self._get_current_device_id()
             
@@ -143,10 +142,12 @@ class TaskScheduler:
             
             # 获取分配的任务
             assigned_tasks = CrawlTaskDAO.get_device_tasks(device_id)
-            
+            logger.info(f"Worker {device_id} has {len(assigned_tasks)} tasks in assigned and running status")
+
             # 执行任务
             for task in assigned_tasks:
                 if task['status'] == 'assigned':
+                    logger.info(f"Worker {device_id} is executing task {task['id']} of type {task['task_type']}")
                     self._execute_task(task, device_id)
                     
         except Exception as e:

@@ -59,7 +59,6 @@ show_help() {
     echo "  传统模式:"
     echo "    sync_apps                    - 同步用户 App 列表"
     echo "    sync_data [--days N]         - 同步最近 N 天数据（默认1天）"
-    echo "    web                          - 启动Web管理界面"
     echo ""
     echo "  分布式模式:"
     echo "    distribute master [选项]     - 启动分布式主节点"

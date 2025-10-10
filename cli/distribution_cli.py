@@ -231,10 +231,10 @@ class DistributionCLI:
         config = self._load_config_with_defaults(args, "master", config_kwargs)
         
         try:
-            # 初始化服务
+            # 初始化服务，初始化了api中的全局服务，包括设备管理和任务执行器
             init_distribution_services(mode="master", device_id=config.device_id)
             
-            # 启动服务
+            # 启动上述初始化的服务
             start_distribution_services()
             
             # 启动HTTP API服务器
@@ -332,7 +332,7 @@ class DistributionCLI:
     async def _run_worker_async(self, config: DistributionConfig):
         """异步运行工作节点"""
         client = get_async_distribution_client()
-        
+        logger.info("Starting asynchronous worker node...")
         try:
             # 注册设备
             success = await client.register_device()
