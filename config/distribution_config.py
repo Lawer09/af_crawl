@@ -40,7 +40,7 @@ class DistributionConfig:
     device_type: str = "worker"
     
     # 主节点配置
-    master_host: str = "localhost"
+    master_host: str = "0.0.0.0"
     master_port: int = 8000
     master_api_prefix: str = "/api/distribution"
     

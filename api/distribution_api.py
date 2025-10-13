@@ -14,6 +14,7 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
+from services.data_service import fetch_user_app_data
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,25 @@ class TaskStatusUpdate(BaseModel):
     error_message: Optional[str] = None
     result_data: Optional[Dict] = None
 
+
+# 获取用户数据
+@router.post("/user/app/data")
+def get_user_app_data(task: dict):
+    """获取用户app数据"""
+    try:
+        # 调用数据服务获取数据
+        rows = fetch_user_app_data(
+            username=task["username"],
+            password=task["password"],
+            app_id=task["app_id"],
+            start_date=task["start_date"],
+            end_date=task["end_date"]
+        )
+        return {"status": "success", "rows": rows}
+        
+    except Exception as e:
+        logger.exception(f"Error fetching user app data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 设备管理接口
 @router.post("/devices/register")

@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict
-
 import requests
 from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext
 import time

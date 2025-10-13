@@ -387,6 +387,5 @@ def run(days: int = 1):
 
     _migrate_af_user_app_data()
 
-
 if __name__ == "__main__":
     run()

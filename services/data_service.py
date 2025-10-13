@@ -1,8 +1,7 @@
 from __future__ import annotations
-
-import logging
 from typing import List, Dict
 
+import logging
 import config.af_config as cfg
 from services.login_service import get_session
 from model.user_app_data import UserAppDataDAO
@@ -10,9 +9,8 @@ from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
-def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date: str):
-    username = user["email"]
-    password = user["password"]
+def fetch_user_app_data(username: str, password:str, app_id: str, start_date: str, end_date: str):
+    """ 获取某个用户下的某个app的指定日期的数据 """
 
     session, _ = get_session(username, password)
 
@@ -31,7 +29,7 @@ def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date
     resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
     resp.raise_for_status()
     try:
-        data = resp.json()
+        data : dict = resp.json()
     except ValueError as e:
         logger.error(f"Failed to parse JSON response for {username}, app_id={app_id}: {e}. Response content: {resp.text[:500]}")
         raise
@@ -58,6 +56,13 @@ def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date
             "end_date": end_date,
             "days": days_cnt,
         })
+    return rows
 
+
+def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date: str):
+    """ 获取某个用户下的某个app的指定日期的数据 """
+    rows = fetch_user_app_data(
+        user["email"], user["password"], app_id, start_date, end_date
+    )
     UserAppDataDAO.save_data_bulk(rows)
     return rows
