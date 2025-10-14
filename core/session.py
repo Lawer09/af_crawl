@@ -187,6 +187,7 @@ class SessionManager:
                 logger.warning(f"Proxy URL parse error: {proxy_url}")
 
         pw = sync_playwright().start()
+        
         launch_kwargs = {
             "headless": PLAYWRIGHT["headless"],
             "slow_mo": PLAYWRIGHT["slow_mo"],
@@ -212,6 +213,25 @@ class SessionManager:
             }
             ctx = browser.new_context(**context_args)
             page = ctx.new_page()
+            # 使用浏览器上下文直接 fetch 获取出口 IP 与真实 UA（验证浏览器代理是否生效）
+            try:
+                ip_val = page.evaluate(
+                    """
+                    async () => {
+                        try {
+                            const r = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
+                            const j = await r.json();
+                            return j.ip || null;
+                        } catch (e) {
+                            return null;
+                        }
+                    }
+                    """
+                )
+                ua_real = page.evaluate("() => navigator.userAgent")
+                logger.info("Browser proxy check -> exit_ip=%s real_ua=%s", ip_val, ua_real)
+            except Exception as _e:
+                logger.debug("browser proxy check failed: %s", _e)
             
             # 增加页面加载超时和重试
             max_retries = 3

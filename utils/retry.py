@@ -26,7 +26,6 @@ def request_with_retry(
     session: requests.Session,
     method: str,
     url: str,
-    *,
     max_retry: int = CRAWLER["max_retry"],
     base_delay: int = CRAWLER["retry_delay_seconds"],
     retry_status: set[int] | None = None,
