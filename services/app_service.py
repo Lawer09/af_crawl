@@ -109,7 +109,7 @@ def update_daily_apps():
         
         apps = fetch_apps(user)
         for app in apps:
-            app["user_type_id"] = pid
+            app["user_type_id"] = user.get("pid")
         all_apps.extend(apps)
 
     # 4) 批量保存，减少 DB 操作
