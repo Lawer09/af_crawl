@@ -174,7 +174,7 @@ case "$CMD" in
         ;;
     "web")
         echo "[$(timestamp)] 启动Web管理界面..."
-        echo "[$(timestamp)] 访问地址: http://localhost:8080"
+        echo "[$(timestamp)] 访问地址: http://localhost:8880"
         ;;
     "distribute")
         case "$SUBCMD" in
