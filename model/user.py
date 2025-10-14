@@ -32,6 +32,21 @@ class UserDAO:
             return None
 
     @classmethod
+    def get_user_by_pid(cls, pid: str) -> Optional[Dict]:
+        """根据 pid 查询用户（当 pid='pid'）"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT email, password, account_type FROM {cls.TABLE} WHERE pid = %s",
+                (pid,)
+            )
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user by pid: {e}")
+            return None
+
+    @classmethod
     def save_user(cls, email: str, password: str, account_type: str):
         sql = f"""
         INSERT INTO {cls.TABLE} (email, password, account_type, enable)
