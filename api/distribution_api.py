@@ -14,7 +14,7 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
-from services.data_service import fetch_user_app_data
+from services.data_service import fetch_user_app_data, fetch_by_pid
 from model.user import UserDAO
 
 logger = logging.getLogger(__name__)
@@ -102,13 +102,8 @@ def get_user_app_data_by_pid(
 ):
     """通过 pid 获取账号信息后拉取用户 app 数据"""
     try:
-        user = UserDAO.get_user_by_pid(pid)
-        if not user:
-            raise HTTPException(status_code=404, detail="未找到对应pid的用户")
-
-        rows = fetch_user_app_data(
-            username=user["email"],
-            password=user["password"],
+        rows = fetch_by_pid(
+            pid=pid,
             app_id=app_id,
             start_date=start_date,
             end_date=end_date

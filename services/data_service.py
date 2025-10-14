@@ -5,14 +5,15 @@ import logging
 import config.af_config as cfg
 from services.login_service import get_session
 from model.user_app_data import UserAppDataDAO
+from model.user import UserDAO, UserProxyDAO
 from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
-def fetch_user_app_data(username: str, password:str, app_id: str, start_date: str, end_date: str):
+def fetch_user_app_data(username: str, password:str, app_id: str, start_date: str, end_date: str, proxies: dict | None = None, browser_context_args: dict = {}):
     """ 获取某个用户下的某个app的指定日期的数据 """
 
-    session, _ = get_session(username, password)
+    session = get_session(username, password, proxies=proxies, browser_context_args=browser_context_args)   
 
     headers = {
         "Referer": cfg.NEW_TABLE_API_REFERER,
@@ -59,10 +60,37 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
     return rows
 
 
+def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str):
+    """ 获取某个用户下的某个pid的指定日期的数据 """
+
+    user = UserDAO.get_user_by_pid(pid)
+    if not user:
+        logger.error(f"User with pid={pid} not found.")
+        return []
+
+    username = user["email"]
+    password = user["password"]
+
+    proxy = UserProxyDAO.get_by_pid(pid)
+
+    proxies = {"http": proxy.get("proxy_url"), "https": proxy.get("proxy_url")} if proxy else None
+    browser_context_args = {
+        "user_agent": proxy.get("ua"),
+        "timezone_id": proxy.get("timezone_id"),
+    } if proxy else {}
+
+    rows = fetch_user_app_data(
+        username, password, app_id, start_date, end_date,
+        proxies=proxies, browser_context_args=browser_context_args
+    )
+    return rows
+
+
 def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date: str):
     """ 获取某个用户下的某个app的指定日期的数据 """
     rows = fetch_user_app_data(
-        user["email"], user["password"], app_id, start_date, end_date
+        user["email"], user["password"], app_id, start_date, end_date,
+        proxies=user.get("proxies"), browser_context_args=user.get("browser_context_args", {})
     )
     UserAppDataDAO.save_data_bulk(rows)
     return rows

@@ -50,6 +50,7 @@ PROXY = {
 # 增加超时时间
 PLAYWRIGHT = {
     'user_agent': os.getenv('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'),
+    'timezone_id': os.getenv('TIMEZONE_ID', 'America/New_York'),
     'headless': os.getenv('PW_HEADLESS', 'true').lower() == 'true',
     'slow_mo': int(os.getenv('PW_SLOWMO', '1000')),  # 增加延迟
     'timeout': int(os.getenv('PW_TIMEOUT', '180000')),  # 增加到3分钟

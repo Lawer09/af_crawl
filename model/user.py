@@ -63,3 +63,25 @@ class UserDAO:
         sql = f"SELECT email, password, account_type FROM {cls.TABLE} WHERE email IN ({placeholders})"
         rows = mysql_pool.select(sql, tuple(emails))
         return {row['email']: row for row in rows}
+
+
+class UserProxyDAO:
+    """_tb_static_proxy 表：用户静态代理配置（与 af_user.pid 一一对应）"""
+
+    TABLE = "_tb_static_proxy"
+
+    @classmethod
+    def get_by_pid(cls, pid: str) -> Optional[Dict]:
+        """根据 pid 查询一条代理记录"""
+        try:
+            sql = (
+                f"SELECT id, pid, proxy_url, country, sub_at, end_at, created_at, "
+                f"system_type, ua, timezone_id FROM {cls.TABLE} WHERE pid = %s LIMIT 1"
+            )
+            rows = mysql_pool.select(sql, (pid,))
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user proxy by pid: {e}")
+            return None

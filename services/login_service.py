@@ -11,18 +11,14 @@ from config.settings import USE_PROXY
 
 logger = logging.getLogger(__name__)
 
-
-def get_session(username: str, password: str) -> Tuple[Session, dict | None]:
-    """返回 (session, proxies)；proxies 可直接传给 requests"""
+def get_session(username: str, password: str, proxies: dict | None = None, browser_context_args: dict = {}) -> Session:
+    """返回 session 可直接传给 requests"""
     # 1. 拿到代理（绑定用户名）
-    proxy_url = proxy_pool.get_proxy(username) if USE_PROXY else None
-    proxies = ProxyPool.build_requests_proxy(proxy_url)
+    if proxies is None:
+        proxy_url = proxy_pool.get_proxy(username) if USE_PROXY else None
+        proxies = ProxyPool.build_requests_proxy(proxy_url)
 
     # 2. 拿到 requests.Session（已包含 Cookie & UA）
-    sess = session_manager.get_session(username, password, proxies=proxies)
+    sess = session_manager.get_session(username, password, browser_context_args=browser_context_args, proxies=proxies)
 
-    # 3. 如果设置了代理，则同时设置到 session 里，方便后续复用
-    if proxies:
-        sess.proxies.update(proxies)
-
-    return sess, proxies 
+    return sess

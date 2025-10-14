@@ -8,7 +8,6 @@ from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserCon
 import time
 from model.cookie import cookie_model
 from config.settings import PLAYWRIGHT
-from core.proxy import proxy_pool
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ class SessionManager:
         username: str,
         password: str,
         *,
-        user_agent: Optional[str] = PLAYWRIGHT['user_agent'],
+        browser_context_args: Optional[dict] = {},
         proxies: Optional[dict] = None,
     ) -> requests.Session:
 
@@ -40,13 +39,13 @@ class SessionManager:
         if record and not self._is_expired(record["expired_at"]):
             logger.info("cookie hit -> %s", username)
             # 缓存密码供后续刷新使用
-            self._pwd_cache[username] = (password, user_agent or record.get("user_agent"))
-            return self._build_requests_session(record["cookies"], user_agent or record.get("user_agent"),username)
+            self._pwd_cache[username] = (password, browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"])
+            return self._build_requests_session(record["cookies"], browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"], username)
         # --- 登录重试 ---
         for attempt in range(2):
             try:
                 logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt+1)
-                cookies, expired_at, ua = self._login_by_playwright(username, password, user_agent, proxies)
+                cookies, expired_at, ua = self._login_by_playwright(username, password, browser_context_args, proxies)
                 break
             except Exception as e:
                 logger.warning("login failed #%s -> %s", attempt+1, e)
@@ -60,14 +59,14 @@ class SessionManager:
             password=password,
             cookies=cookies,
             expired_at=expired_at,
-            user_agent=ua,
+            user_agent=browser_context_args.get("user_agent", ua),
         )
 
-        sess = self._build_requests_session(cookies, ua, username)
+        sess = self._build_requests_session(cookies, browser_context_args.get("user_agent", ua), username)
         if proxies:
             sess.proxies.update(proxies)
         # 缓存密码供刷新
-        self._pwd_cache[username] = (password, ua)
+        self._pwd_cache[username] = (password, browser_context_args.get("user_agent", ua))
         return sess
 
     # ------------------ inner ------------------
@@ -122,15 +121,49 @@ class SessionManager:
     def _get_bw_session_by_playwright(
         self,
         username: str,
-        user_agent: Optional[str],
+        browser_context_args: Optional[dict] = None,
         proxies: Optional[dict] = None,
         ) -> tuple[requests.Session, BrowserContext, dict, str]:
                 # 增加重试间隔
         import time
         
         proxy_url = None
+        proxy_auth = None
         if proxies:
             proxy_url = proxies.get("http") or proxies.get("https")
+            # 解析可能的账号密码形式，支持：
+            # 1) http://user:pass@host:port
+            # 2) https://user:pass@host:port
+            # 3) host:port:user:pass（无协议）
+            # 4) host:port（无账号密码）
+            try:
+                from urllib.parse import urlsplit
+                if proxy_url:
+                    if ":" in proxy_url and proxy_url.count(":") == 3 and "@" not in proxy_url:
+                        # 形如 host:port:user:pass
+                        host, port, user, pwd = proxy_url.split(":", 3)
+                        server = f"http://{host}:{port}"
+                        proxy_auth = {"server": server, "username": user, "password": pwd}
+                    else:
+                        # 其他情况按 URL 解析，提取 userinfo
+                        if not proxy_url.startswith("http://") and not proxy_url.startswith("https://"):
+                            server = f"http://{proxy_url}"
+                        else:
+                            server = proxy_url
+                        parsed = urlsplit(server)
+                        if parsed.username or parsed.password:
+                            # server 需不含凭据
+                            clean_server = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
+                            proxy_auth = {
+                                "server": clean_server,
+                                "username": parsed.username or "",
+                                "password": parsed.password or "",
+                            }
+                        else:
+                            proxy_auth = {"server": server}
+            except Exception:
+                # 解析失败时，直接按原字符串作为 server
+                proxy_auth = {"server": proxy_url}
 
         pw = sync_playwright().start()
         launch_kwargs = {
@@ -140,15 +173,16 @@ class SessionManager:
         }
         
         if proxy_url:
-            launch_kwargs["proxy"] = {"server": proxy_url}
+            # 使用 Playwright 的原生代理认证能力，避免弹出认证窗口
+            launch_kwargs["proxy"] = proxy_auth or {"server": proxy_url}
             
         browser = pw.chromium.launch(**launch_kwargs)
         try:
             context_args = {
                 "viewport": {"width": 1920, "height": 1080},
-                "user_agent": user_agent,
+                "user_agent": browser_context_args.get("user_agent", PLAYWRIGHT["user_agent"]),
                 "locale": "en-US",
-                "timezone_id": "Asia/Singapore",
+                "timezone_id": browser_context_args.get("timezone_id", PLAYWRIGHT["timezone_id"]),
             }
             ctx = browser.new_context(**context_args)
             page = ctx.new_page()
@@ -204,7 +238,7 @@ class SessionManager:
         self,
         username: str,
         password: str,
-        user_agent: Optional[str],
+        browser_context_args: Optional[dict],
         proxies: Optional[dict] = None,
     ) -> tuple[list, datetime, str]:
 
@@ -212,7 +246,7 @@ class SessionManager:
 
         s, final_cookies, headers,ua = self._get_bw_session_by_playwright(
             username,
-            user_agent, 
+            browser_context_args, 
             proxies)
 
         payload = {"username": username, "password": password, "keep-user-logged-in": False}
