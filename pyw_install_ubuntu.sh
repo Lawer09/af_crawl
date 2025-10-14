@@ -18,29 +18,8 @@ pip install playwright
 
 # 3. 安装系统运行时依赖（Playwright 浏览器所需）
 sudo apt update
-sudo apt install -y \
-    libasound2 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libatspi2.0-0 \
-    libnss3 \
-    libdbus-1-3 \
-    libx11-6 \
-    libxcursor1 \
-    libxshmfence1 \
-    libvulkan1
-
-log "补充安装 Playwright 所需系统依赖..."
-sudo playwright install-deps
+log "安装 Playwright 所需系统依赖..."
+python -m playwright install-deps
 
 # 4. 安装浏览器核心文件（Chromium 等）
 log "执行 playwright install 下载浏览器..."
