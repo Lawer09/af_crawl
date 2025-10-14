@@ -14,7 +14,7 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
-from services.data_service import fetch_user_app_data, fetch_by_pid
+from services.data_service import fetch_user_app_data, fetch_by_pid_and_offer_id
 from model.user import UserDAO
 
 logger = logging.getLogger(__name__)
@@ -97,17 +97,20 @@ def get_user_app_data(task: dict):
 def get_user_app_data_by_pid(
     pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
     app_id: str = Query(..., description="应用ID"),
+    offer_id: str = Query(..., description="offer ID"),
     start_date: str = Query(..., description="开始日期，YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期，YYYY-MM-DD")
 ):
     """通过 pid 获取账号信息后拉取用户 app 数据"""
     try:
-        rows = fetch_by_pid(
+        rows = fetch_by_pid_and_offer_id(
             pid=pid,
             app_id=app_id,
+            offer_id=offer_id,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
         )
+        
         return {"status": "success", "rows": rows}
 
     except HTTPException:

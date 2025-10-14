@@ -14,7 +14,8 @@ class UserAppDataDAO:
     CREATE_SQL = f"""
     CREATE TABLE IF NOT EXISTS {TABLE} (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(255) NOT NULL,
+        username VARCHAR(255) NULL,
+        pid VARCHAR(50) NOT NULL,
         app_id VARCHAR(128) NOT NULL,
         offer_id VARCHAR(128) NOT NULL,
         af_clicks INT DEFAULT 0,
@@ -23,7 +24,6 @@ class UserAppDataDAO:
         end_date DATE NOT NULL,
         days INT DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uk_offer (username, app_id, offer_id, start_date, end_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
@@ -38,19 +38,32 @@ class UserAppDataDAO:
         cls.init_table()
         sql = f"""
         INSERT INTO {cls.TABLE}
-            (username, app_id, offer_id, af_clicks, af_installs, start_date, end_date, days, created_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-        ON DUPLICATE KEY UPDATE
-            af_clicks=VALUES(af_clicks), af_installs=VALUES(af_installs), days=VALUES(days)
+            (username, pid, app_id, offer_id, af_clicks, af_installs, start_date, end_date, days, created_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
         """
         params = [
             (
-                d["username"], d["app_id"], d["offer_id"], d["af_clicks"], d["af_installs"],
+                d["username"], d.get("pid"), d["app_id"], d["offer_id"], d["af_clicks"], d["af_installs"],
                 d["start_date"], d["end_date"], d["days"],
             )
             for d in datas
         ]
         mysql_pool.executemany(sql, params)
+
+    @classmethod
+    def get_recent_rows(cls, pid: str, app_id: str, start_date: str, end_date: str, within_minutes: int = 60) -> List[Dict]:
+        """查询在最近 within_minutes 分钟内生成的缓存数据。
+        精确匹配 pid、app_id、start_date、end_date。
+        """
+        cls.init_table()
+        sql = f"""
+        SELECT username, pid, app_id, offer_id, af_clicks, af_installs, start_date, end_date, days, created_at
+        FROM {cls.TABLE}
+        WHERE pid = %s AND app_id = %s AND start_date = %s AND end_date = %s
+          AND created_at >= NOW() - INTERVAL %s MINUTE
+        """
+        rows = mysql_pool.select(sql, (pid, app_id, start_date, end_date, within_minutes))
+        return rows or []
 
     # -------- 活跃度 ---------
     @classmethod
@@ -70,4 +83,4 @@ class UserAppDataDAO:
         """返回 {(username, app_id): max_end_date_str} 用于判断长期无数据的应用"""
         sql = f"SELECT username, app_id, MAX(end_date) AS d FROM {cls.TABLE} GROUP BY username, app_id"
         rows = mysql_pool.select(sql)
-        return {(r['username'], r['app_id']): str(r['d']) for r in rows if r['d']} 
+        return {(r['username'], r['app_id']): str(r['d']) for r in rows if r['d']}

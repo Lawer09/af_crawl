@@ -75,7 +75,6 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
         })
     return rows
 
-
 def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str):
     """ 获取某个用户下的某个pid的指定日期的数据 """
 
@@ -102,11 +101,30 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str):
     return rows
 
 
-def fetch_and_save_table_data(user: Dict, app_id: str, start_date: str, end_date: str):
-    """ 获取某个用户下的某个app的指定日期的数据 """
-    rows = fetch_user_app_data(
-        user["email"], user["password"], app_id, start_date, end_date,
-        proxies=user.get("proxies"), browser_context_args=user.get("browser_context_args", {})
-    )
+def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str):
+    """优先返回最近1小时内的缓存数据；否则查询并落库后返回。"""
+
+    # 1. 先查 DB 缓存（最近 60 分钟）
+    cached = UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, within_minutes=60)
+    if cached:
+        return cached
+
+    # 2. 无缓存则实时查询
+    rows = fetch_by_pid(pid, app_id, start_date, end_date)
+    for row in rows:
+        row['pid'] = pid
+    # 3. 落库
     UserAppDataDAO.save_data_bulk(rows)
     return rows
+
+
+def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str, start_date: str, end_date: str):
+    """ 获取某个pid下的某个app的指定日期的数据 """
+    rows = try_get_and_save_data(
+        pid, app_id, start_date, end_date
+    )
+    if offer_id:
+        rows = list(filter(lambda x: x["offer_id"] == offer_id, rows))
+    return rows
+
+
