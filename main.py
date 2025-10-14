@@ -105,7 +105,7 @@ if __name__ == "__main__":
         import uvicorn
         
         logger.info("=== Starting web server ===")
-        uvicorn.run(app, host="0.0.0.0", port=8080)
+        uvicorn.run(app, host="0.0.0.0", port=8880)
     
     elif args.command == "distribute":
         # 导入分布式CLI

@@ -8,7 +8,7 @@ set -o pipefail
 LOG_TS=$(date +"%Y-%m-%d %H:%M:%S")
 
 # 配置项
-REPO_DIR="/root/crawl/ausk"
+REPO_DIR="/root/af_crawl/af_crawl"
 PYTHON_CMD="python3.13"
 MAIN_SCRIPT="main.py"
 
