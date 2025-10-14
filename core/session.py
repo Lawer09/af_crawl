@@ -23,6 +23,8 @@ class SessionManager:
         self._browser: Optional[Browser] = None
         # 缓存用户密码，用于 token 失效时自动刷新
         self._pwd_cache: Dict[str, tuple[str, str | None]] = {}
+        # 缓存用户代理配置，确保命中 cookie 时与自动刷新均沿用相同代理
+        self._proxy_cache: Dict[str, Optional[dict]] = {}
 
     # ------------------ public ------------------
     def get_session(
@@ -40,7 +42,16 @@ class SessionManager:
             logger.info("cookie hit -> %s", username)
             # 缓存密码供后续刷新使用
             self._pwd_cache[username] = (password, browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"])
-            return self._build_requests_session(record["cookies"], browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"], username)
+            sess = self._build_requests_session(
+                record["cookies"],
+                browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"],
+                username,
+            )
+            # 命中缓存也携带代理
+            if proxies:
+                sess.proxies.update(proxies)
+            self._proxy_cache[username] = proxies
+            return sess
         # --- 登录重试 ---
         for attempt in range(2):
             try:
@@ -67,6 +78,8 @@ class SessionManager:
             sess.proxies.update(proxies)
         # 缓存密码供刷新
         self._pwd_cache[username] = (password, browser_context_args.get("user_agent", ua))
+        # 缓存代理供刷新沿用
+        self._proxy_cache[username] = proxies
         return sess
 
     # ------------------ inner ------------------
@@ -107,6 +120,8 @@ class SessionManager:
                     username,
                     password,
                     {"user_agent": ua} if ua else {},
+                    # 刷新时沿用旧的代理
+                    self._proxy_cache.get(username),
                 )
                 # 更新 DB
                 cookie_model.add_or_update_cookie(username=username, password=password, cookies=cookies,
