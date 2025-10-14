@@ -37,7 +37,7 @@ def request_with_retry(
         session     已配置好 Cookie / 代理的 requests.Session
         method      'GET' / 'POST' 等
         url         请求地址
-        max_retry   最大重试次数（不含首发）
+        max_retry   最大重试次数
         base_delay  初始延时（秒）
         retry_status 覆盖默认 status 集
         kwargs      其余 requests.request 参数
@@ -45,7 +45,7 @@ def request_with_retry(
 
     retry_set = retry_status or (_FAST_RETRY_STATUS | _NORMAL_RETRY_STATUS)
  
-    for attempt in range(max_retry+1):
+    for attempt in range(max_retry):
         # ------- 确保带上 X-Username -------
         base_headers = session.headers.copy()
         req_headers = kwargs.pop("headers", {}) or {}
