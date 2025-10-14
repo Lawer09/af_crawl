@@ -24,9 +24,19 @@ def _parse_args():
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("sync_apps", help="同步用户 App 列表")
+    p_apps_cron = sub.add_parser("sync_apps_cron", help="定时同步用户 App 列表")
+    p_apps_cron.add_argument("--interval-minutes", type=int, default=60, help="执行间隔(分钟)，默认60")
 
     p_data = sub.add_parser("sync_data", help="同步用户 App 数据")
     p_data.add_argument("--days", type=int, default=1, help="向前同步的天数，默认 1")
+    p_data_cron = sub.add_parser("sync_data_cron", help="定时同步用户 App 数据（每日）")
+    p_data_cron.add_argument("--interval-hours", type=int, default=24, help="执行间隔(小时)，默认24")
+    # 统一定时任务入口：可选择同时启动多个定时任务
+    p_cron = sub.add_parser("cron", help="统一定时任务入口")
+    p_cron.add_argument("--apps", action="store_true", help="启动应用列表更新定时任务")
+    p_cron.add_argument("--apps-interval-minutes", type=int, default=24*60, help="应用任务执行间隔(分钟)，默认24小时")
+    p_cron.add_argument("--data", action="store_true", help="启动应用数据更新定时任务")
+    p_cron.add_argument("--data-interval-hours", type=int, default=24, help="数据任务执行间隔(小时)，默认24")
     
     sub.add_parser("web", help="启动Web管理界面")
     
@@ -94,11 +104,17 @@ if __name__ == "__main__":
         from tasks.sync_user_apps import run as sync_apps_run
         logger.info("=== sync_apps start ===")
         sync_apps_run()
+    elif args.command == "sync_apps_cron":
+        from schedulers.app_jobs import run_update_apps_cron
+        run_update_apps_cron(interval_minutes=args.interval_minutes)
 
     elif args.command == "sync_data":
         from tasks.sync_app_data import run as sync_data_run
         logger.info("=== sync_data start days=%d ===", args.days)
         sync_data_run(days=args.days)
+    elif args.command == "sync_data_cron":
+        from schedulers.app_jobs import run_update_data_cron
+        run_update_data_cron(interval_hours=args.interval_hours)
     
     elif args.command == "web":
         from web_app import app
@@ -128,6 +144,24 @@ if __name__ == "__main__":
             logger.error("unknown distribute command: %s", args.distribute_command)
             sys.exit(1)
 
+    elif args.command == "cron":
+        from schedulers.app_jobs import start_update_apps_scheduler, start_update_data_scheduler
+        import time
+        started = False
+        if args.apps:
+            start_update_apps_scheduler(interval_minutes=args.apps_interval_minutes)
+            started = True
+        if args.data:
+            start_update_data_scheduler(interval_hours=args.data_interval_hours)
+            started = True
+        if not started:
+            logger.error("请至少选择一个定时任务，例如: --apps 或 --data")
+            sys.exit(1)
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            logger.info("cron stopped by user")
     else:
         logger.error("unknown command: %s", args.command)
         sys.exit(1)

@@ -5,6 +5,7 @@ import logging
 import config.af_config as cfg
 from services.login_service import get_session
 from model.user_app_data import UserAppDataDAO
+from model.user_app import UserAppDAO
 from model.user import UserDAO, UserProxyDAO
 from utils.retry import request_with_retry
 
@@ -127,5 +128,49 @@ def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str, start_date: 
     if offer_id:
         rows = list(filter(lambda x: x["offer_id"] == offer_id, rows))
     return rows
+
+
+def update_daily_data():
+    """每天更新一次数据：遍历所有启用的 pid 用户，按其 app 列表更新昨天数据。
+    仅处理 UserAppDAO 中 user_type_id 为 'pid' 的应用（兼容历史为空的情况）。
+    """
+    from datetime import datetime, timedelta
+    target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+
+    user_proxies = UserProxyDAO.get_enable()
+    if not user_proxies:
+        logger.error("No enable user proxy found for daily data update.")
+        return
+
+    pids = [p.get("pid") for p in user_proxies if p.get("pid")]
+    pid_user_map = UserDAO.get_users_by_pids(pids)
+
+    total_apps = 0
+    total_success = 0
+    for pid in pids:
+        user = pid_user_map.get(pid)
+        if not user:
+            logger.error(f"User with pid={pid} not found for daily update.")
+            continue
+        username = user["email"]
+
+        # 获取该用户的应用列表
+        apps = UserAppDAO.get_user_apps(username)
+        if not apps:
+            continue
+
+        # 仅选择 user_type_id 为 'pid' 的应用；兼容历史记录为空(None)时也视为 pid 账号下应用
+        pid_apps = [a for a in apps if (a.get("user_type_id") == 'pid' or a.get("user_type_id") in (None, ''))]
+
+        for app in pid_apps:
+            app_id = app["app_id"]
+            total_apps += 1
+            try:
+                rows = try_get_and_save_data(pid, app_id, target_date, target_date)
+                total_success += 1 if rows else 0
+            except Exception:
+                logger.exception(f"Daily update failed for pid={pid}, app_id={app_id}")
+
+    logger.info("Daily data update finished: target_date=%s, apps=%d, success=%d", target_date, total_apps, total_success)
 
 
