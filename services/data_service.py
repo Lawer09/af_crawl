@@ -26,8 +26,15 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
     headers.setdefault("Accept-Language", "en-US,en;q=0.9")
     headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
-    # 注入 XSRF Token（来自 aws-waf-token），如果存在
-    waf_token = session.cookies.get("aws-waf-token")
+    # 注入 XSRF Token（来自 aws-waf-token），安全读取避免重复同名 Cookie 引发错误
+    waf_token = None
+    try:
+        for _c in session.cookies:
+            if getattr(_c, "name", None) == "aws-waf-token":
+                waf_token = getattr(_c, "value", None)
+                break
+    except Exception as _e:
+        logger.debug("read waf token failed: %s", _e)
     if waf_token:
         headers["X-XSRF-TOKEN"] = waf_token
 

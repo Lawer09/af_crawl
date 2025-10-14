@@ -61,8 +61,15 @@ def request_with_retry(
         req_headers.setdefault("Accept-Language", "en-US,en;q=0.9")
         req_headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
-        # ------- 注入 XSRF Token（来自 aws-waf-token） -------
-        waf_token = session.cookies.get("aws-waf-token")
+        # ------- 注入 XSRF Token（来自 aws-waf-token），避免因多条同名 Cookie 报错 -------
+        waf_token = None
+        try:
+            for _c in session.cookies:
+                if getattr(_c, "name", None) == "aws-waf-token":
+                    waf_token = getattr(_c, "value", None)
+                    break
+        except Exception as _e:
+            logger.debug("read waf token failed: %s", _e)
         if waf_token and "X-XSRF-TOKEN" not in req_headers:
             req_headers["X-XSRF-TOKEN"] = waf_token
         kwargs["headers"] = req_headers
@@ -97,15 +104,20 @@ def request_with_retry(
                     session.cookies.clear()
                     for c in record.get("cookies", []):
                         session.cookies.set(c.get("name"), c.get("value"), domain=c.get("domain"), path=c.get("path"))
-                    # 同步特殊 Cookie，确保 XSRF/JWT 等最新
-                    if record.get("aws_waf_token"):
+                    # 同步特殊 Cookie（若基础 cookies 中未包含），确保 XSRF/JWT 等最新，避免重复
+                    names_present = {c.get("name") for c in record.get("cookies", [])}
+                    if "aws-waf-token" not in names_present and record.get("aws_waf_token"):
                         session.cookies.set("aws-waf-token", record["aws_waf_token"], domain=".appsflyer.com", path="/")
-                    if record.get("af_jwt"):
+                    if "af_jwt" not in names_present and record.get("af_jwt"):
                         session.cookies.set("af_jwt", record["af_jwt"], domain=".appsflyer.com", path="/")
-                    if record.get("auth_tkt"):
+                    if "auth_tkt" not in names_present and record.get("auth_tkt"):
                         session.cookies.set("auth_tkt", record["auth_tkt"], domain=".appsflyer.com", path="/")
-                    # 更新下一次重试的 XSRF 头
-                    waf_token = session.cookies.get("aws-waf-token")
+                    # 更新下一次重试的 XSRF 头（安全读取）
+                    waf_token = None
+                    for _c in session.cookies:
+                        if getattr(_c, "name", None) == "aws-waf-token":
+                            waf_token = getattr(_c, "value", None)
+                            break
                     if waf_token:
                         req_headers["X-XSRF-TOKEN"] = waf_token
                         kwargs["headers"] = req_headers
