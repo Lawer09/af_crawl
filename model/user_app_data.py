@@ -23,7 +23,7 @@ class UserAppDataDAO:
         start_date DATE NOT NULL,
         end_date DATE NOT NULL,
         days INT DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
