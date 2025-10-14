@@ -51,7 +51,7 @@ class SessionManager:
                 logger.warning("login failed #%s -> %s", attempt+1, e)
                 if attempt == 2:
                     raise
-                time.sleep(30 * (attempt + 1))
+                time.sleep(15 * (attempt + 1))
 
         # 3. 写入 DB
         cookie_model.add_or_update_cookie(
@@ -121,11 +121,10 @@ class SessionManager:
     def _get_bw_session_by_playwright(
         self,
         username: str,
-        browser_context_args: Optional[dict] = None,
+        browser_context_args: Optional[dict] = {},
         proxies: Optional[dict] = None,
         ) -> tuple[requests.Session, BrowserContext, dict, str]:
                 # 增加重试间隔
-        import time
         
         proxy_url = None
         proxy_auth = None
@@ -162,8 +161,8 @@ class SessionManager:
                         else:
                             proxy_auth = {"server": server}
             except Exception:
-                # 解析失败时，直接按原字符串作为 server
-                proxy_auth = {"server": proxy_url}
+                # 解析失败
+                logger.warning(f"Proxy URL parse error: {proxy_url}")
 
         pw = sync_playwright().start()
         launch_kwargs = {
@@ -172,9 +171,9 @@ class SessionManager:
             "timeout": PLAYWRIGHT["timeout"],
         }
         
-        if proxy_url:
+        if proxy_auth:
             # 使用 Playwright 的原生代理认证能力，避免弹出认证窗口
-            launch_kwargs["proxy"] = proxy_auth or {"server": proxy_url}
+            launch_kwargs["proxy"] = proxy_auth
             
         browser = pw.chromium.launch(**launch_kwargs)
         try:
@@ -210,7 +209,8 @@ class SessionManager:
             for c in base_cookies:
                 s.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path"))
 
-            ua = user_agent or page.evaluate("() => navigator.userAgent")
+            # 使用上下文中的 UA（如未提供则读取页面 UA）
+            ua = context_args.get("user_agent") or page.evaluate("() => navigator.userAgent")
             headers = {
                 "User-Agent": ua,
                 "Referer": "https://hq1.appsflyer.com/auth/login",
