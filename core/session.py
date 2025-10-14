@@ -102,7 +102,8 @@ class SessionManager:
     # ------------------ token 检测 ------------------
     def _check_token(self, resp: requests.Response, *args, **kwargs):
 
-        if resp.status_code in (401, 403, 202):
+        # 仅在认证失败时触发自动刷新；202 为排队，不视为 token 失效
+        if resp.status_code in (401, 403):
             username = resp.request.headers.get('x-username') or resp.request.headers.get('X-Username')
             if not username:
                 logger.warning("no username in request headers")
@@ -117,7 +118,7 @@ class SessionManager:
 
             proxies = self._proxy_cache.get(username) or None
 
-            logger.info("aws_waf_token 失效，尝试自动刷新 -> %s : %s proxy: %s", username, password, proxies)
+            logger.info("认证失败，尝试自动刷新 -> %s : %s proxy: %s", username, password, proxies)
             try:
                 cookies, expired_at, ua_new = self._login_by_playwright(
                     username,

@@ -123,14 +123,24 @@ def request_with_retry(
         except Exception as e:
             logger.debug("refresh cookies from DB failed: %s", e)
 
-        delay = _backoff(base_delay, attempt)
+        # 优先使用服务端提供的排队等待时间
+        delay_hdr = 0
+        try:
+            ra = resp.headers.get("Retry-After")
+            if ra:
+                delay_hdr = int(ra)
+        except Exception:
+            delay_hdr = 0
+
+        delay = max(delay_hdr, _backoff(base_delay, attempt))
         logger.warning(
-            "[%s] %s 返回 %s，第 %s 次重试，延时 %ss",
+            "[%s] %s 返回 %s，第 %s 次重试，延时 %ss (Retry-After=%s)",
             method,
             url,
             resp.status_code,
             attempt + 1,
             delay,
+            delay_hdr or "-",
         )
         time.sleep(delay)
 
