@@ -56,6 +56,16 @@ def request_with_retry(
                 req_headers["X-Username"] = base_headers["x-username"]
         kwargs["headers"] = req_headers
 
+        # 首次尝试时打印当前出口 IP（使用同一 session 与代理）
+        if attempt == 0:
+            try:
+                ip_resp = session.get("https://api.ipify.org?format=json", timeout=6)
+                if ip_resp.ok:
+                    ip = ip_resp.json().get("ip")
+                    logger.info("outbound ip=%s ua=%s", ip, session.headers.get("User-Agent"))
+            except Exception as _e:
+                logger.debug("ip check failed: %s", _e)
+
         resp = session.request(method, url, **kwargs)
         if resp.status_code not in retry_set:
             return resp  # 成功（或其它错误交由上层处理）
@@ -72,4 +82,4 @@ def request_with_retry(
         )
         time.sleep(delay)
 
-    raise RuntimeError(f"请求 {url} 连续 {max_retry+1} 次触发限流/排队") 
+    raise RuntimeError(f"请求 {url} 连续 {max_retry+1} 次触发限流/排队")
