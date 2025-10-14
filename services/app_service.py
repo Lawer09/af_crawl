@@ -79,6 +79,8 @@ def fetch_app_by_pid(pid: str) -> List[Dict]:
 
     # 无缓存则实时查询并更新
     apps = fetch_apps(user)
+    for app in apps:
+        app["user_type_id"] = pid
     UserAppDAO.save_apps(apps)
     return apps
 
@@ -100,12 +102,16 @@ def update_daily_apps():
     recent_usernames = UserAppDAO.get_recent_usernames(usernames, within_days=1)
 
     # 3) 仅为未在最近一天更新过的用户抓取 app 列表
-    apps: List[Dict] = []
+    all_apps: List[Dict] = []
     for user in users:
         if user["email"] in recent_usernames:
             continue
-        apps.extend(fetch_apps(user))
+        
+        apps = fetch_apps(user)
+        for app in apps:
+            app["user_type_id"] = pid
+        all_apps.extend(apps)
 
     # 4) 批量保存，减少 DB 操作
-    UserAppDAO.save_apps(apps)
+    UserAppDAO.save_apps(all_apps)
 

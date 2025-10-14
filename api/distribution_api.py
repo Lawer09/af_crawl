@@ -122,7 +122,7 @@ def get_user_app_data_by_pid(
 @router.get("/user/app")
 def get_user_app_data_by_pid(
     pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
-) -> List[Dict]:
+):
     """通过 pid 获取用户 app 列表"""
     try:
         apps = fetch_app_by_pid(pid)
