@@ -61,6 +61,13 @@ show_help() {
     echo "    sync_data [--days N]         - 同步最近 N 天数据（默认1天）"
     echo "    web                          - 启动Web管理界面"
     echo ""
+    echo "  计划任务:"
+    echo "    cron [选项]                  - 启动统一定时任务入口"
+    echo "      --apps                    - 启动应用列表定时更新"
+    echo "      --apps-interval-minutes M - 应用任务执行间隔(分钟)，默认1440"
+    echo "      --data                    - 启动应用数据定时更新"
+    echo "      --data-interval-hours H   - 数据任务执行间隔(小时)，默认24"
+    echo ""
     echo "  分布式模式:"
     echo "    distribute master [选项]     - 启动分布式主节点"
     echo "    distribute worker [选项]     - 启动分布式工作节点"
@@ -83,6 +90,9 @@ show_help() {
     echo "  $0 sync_apps"
     echo "  $0 sync_data --days 7"
     echo "  $0 web"
+    echo "  $0 cron --apps --apps-interval-minutes 60"
+    echo "  $0 cron --data --data-interval-hours 24"
+    echo "  $0 cron --apps --data"
     echo "  $0 distribute master --device-id master-001 --port 7989"
     echo "  $0 distribute worker --device-id worker-001 --master-host 192.168.1.100"
     echo "  $0 distribute standalone --concurrent-tasks 3 --enable-monitoring"
@@ -95,7 +105,7 @@ validate_command() {
     local subcmd="$2"
     
     case "$cmd" in
-        "sync_apps"|"sync_data"|"web")
+        "sync_apps"|"sync_data"|"web"|"cron")
             return 0
             ;;
         "distribute")
@@ -112,7 +122,7 @@ validate_command() {
             ;;
         *)
             echo "错误: 无效的命令: $cmd"
-            echo "有效命令: sync_apps, sync_data, web, distribute"
+            echo "有效命令: sync_apps, sync_data, web, cron, distribute"
             return 1
             ;;
     esac
@@ -128,7 +138,7 @@ EXTRA_ARGS="$@"
 
 if [ -z "$CMD" ]; then
     echo "请输入要执行的命令:"
-    echo "可用命令: sync_apps, sync_data, web, distribute"
+    echo "可用命令: sync_apps, sync_data, web, cron, distribute"
     echo "使用 --help 查看详细帮助"
     read -r CMD
     
@@ -184,6 +194,10 @@ main() {
         "web")
             echo "[$(timestamp)] 启动Web管理界面..."
             echo "[$(timestamp)] 访问地址: http://localhost:8880"
+            ;;
+        "cron")
+            echo "[$(timestamp)] 启动统一定时任务..."
+            echo "[$(timestamp)] 可选项: --apps/--data 以及间隔参数"
             ;;
         "distribute")
             case "$subcmd" in

@@ -34,7 +34,7 @@ def _parse_args():
     # 统一定时任务入口：可选择同时启动多个定时任务
     p_cron = sub.add_parser("cron", help="统一定时任务入口")
     p_cron.add_argument("--apps", action="store_true", help="启动应用列表更新定时任务")
-    p_cron.add_argument("--apps-interval-minutes", type=int, default=24*60, help="应用任务执行间隔(分钟)，默认24小时")
+    p_cron.add_argument("--apps-interval-minutes", type=int, default=24, help="应用任务执行间隔(分钟)，默认24小时")
     p_cron.add_argument("--data", action="store_true", help="启动应用数据更新定时任务")
     p_cron.add_argument("--data-interval-hours", type=int, default=24, help="数据任务执行间隔(小时)，默认24")
     
