@@ -66,7 +66,14 @@ class UserAppDAO:
         return mysql_pool.select(sql, (username, app_id))
 
     @classmethod
+    def get_recent_user_apps(cls, username: str, within_days: int = 1) -> List[Dict]:
+        """查询该用户在最近 within_days 天内更新的 app 列表（使用 updated_at）。"""
+        cls.init_table()
+        sql = f"SELECT * FROM {cls.TABLE} WHERE username=%s AND updated_at >= NOW() - INTERVAL %s DAY"
+        return mysql_pool.select(sql, (username, within_days))
+
+    @classmethod
     def get_all_active(cls) -> List[Dict]:
         cls.init_table()
         sql = f"SELECT * FROM {cls.TABLE} WHERE app_status=0"
-        return mysql_pool.select(sql) 
+        return mysql_pool.select(sql)

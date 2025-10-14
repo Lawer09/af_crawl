@@ -75,6 +75,7 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
         })
     return rows
 
+
 def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str):
     """ 获取某个用户下的某个pid的指定日期的数据 """
 

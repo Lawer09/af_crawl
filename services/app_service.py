@@ -5,19 +5,20 @@ from typing import List, Dict
 
 from services.login_service import get_session
 from model.user_app import UserAppDAO
+from model.user import UserDAO
+
 import config.af_config as cfg
 from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
-
-def fetch_and_save_apps(user: Dict[str, str]) -> List[Dict]:
-    """获取用户 app 列表并写入数据库，返回列表"""
+def fetch_apps(user: Dict[str, str]) -> List[Dict]:
+    """获取用户 app 列表"""
     username = user["email"]
     password = user["password"]
     account_type = user["account_type"]
 
-    session, _ = get_session(username, password)
+    session = get_session(username, password)
 
     if account_type == "pid":
         url = cfg.HOME_APP_URL_PID
@@ -61,7 +62,23 @@ def fetch_and_save_apps(user: Dict[str, str]) -> List[Dict]:
                 "timezone": app["localization"].get("timezone"),
                 "user_type_id": prt_id,
             })
+    return apps
 
-    # 保存
+
+def fetch_app_by_pid(pid: str) -> List[Dict]:
+    """获取某个pid下的app列表并写入数据库，返回列表"""
+    user = UserDAO.get_user_by_pid(pid)
+    if not user:
+        logger.error(f"User with pid={pid} not found.")
+        return []
+    # 先查数据库中最近1天的数据，若存在直接返回
+    recent_apps = UserAppDAO.get_recent_user_apps(user["email"], within_days=1)
+    if recent_apps:
+        return recent_apps
+
+    # 无缓存则实时查询并更新
+    apps = fetch_apps(user)
     UserAppDAO.save_apps(apps)
-    return apps 
+    return apps
+
+
