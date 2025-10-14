@@ -49,8 +49,19 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
     try:
         data : dict = resp.json()
     except ValueError as e:
-        logger.error(f"Failed to parse JSON response for {username}, app_id={app_id}: {e}. Response content: {resp.text[:500]}")
-        raise
+        # 非 JSON 或空响应时，记录细节并返回空数据，避免任务失败
+        ct = resp.headers.get("Content-Type")
+        logger.error(
+            "Failed to parse JSON response for %s app_id=%s from %s: %s. status=%s, content-type=%s, body=%s",
+            username,
+            app_id,
+            cfg.NEW_TABLE_API,
+            e,
+            resp.status_code,
+            ct,
+            (resp.text or "")[:500],
+        )
+        return []
 
     rows: List[Dict] = []
     for adset in data.get("data", []):

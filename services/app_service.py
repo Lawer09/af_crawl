@@ -54,7 +54,22 @@ def fetch_apps(
 
     resp = request_with_retry(session, "GET", url, headers=headers, timeout=30)
     resp.raise_for_status()
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:
+        # 非 JSON 或空响应时，记录细节并返回空列表，避免调度失败
+        ct = resp.headers.get("Content-Type")
+        logger.error(
+            "Failed to parse JSON response for %s (%s) from %s: %s. status=%s, content-type=%s, body=%s",
+            username,
+            account_type,
+            url,
+            e,
+            resp.status_code,
+            ct,
+            (resp.text or "")[:500],
+        )
+        return []
 
     apps: List[Dict] = []
 
