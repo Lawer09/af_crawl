@@ -193,6 +193,10 @@ class SessionManager:
             "headless": PLAYWRIGHT["headless"],
             "slow_mo": PLAYWRIGHT["slow_mo"],
             "timeout": PLAYWRIGHT["timeout"],
+            # 禁用非代理 UDP 的 WebRTC，避免绕过代理/泄露本地 IP
+            "args": [
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+            ],
         }
         
         if proxy_auth:
@@ -213,6 +217,32 @@ class SessionManager:
                 "timezone_id": browser_context_args.get("timezone_id", PLAYWRIGHT["timezone_id"]),
             }
             ctx = browser.new_context(**context_args)
+            # 在所有页面初始化时禁用 WebRTC 相关 API，防止绕过代理与 IP 泄露
+            ctx.add_init_script(
+                """
+                (() => {
+                  const block = () => { throw new Error('WebRTC disabled'); };
+                  const keys = ['RTCPeerConnection','webkitRTCPeerConnection','mozRTCPeerConnection'];
+                  for (const k of keys) {
+                    if (window[k]) {
+                      try {
+                        Object.defineProperty(window, k, { get: () => block });
+                      } catch (e) {
+                        window[k] = block;
+                      }
+                    }
+                  }
+                  if (navigator.mediaDevices) {
+                    const md = navigator.mediaDevices;
+                    ['getUserMedia','getDisplayMedia','enumerateDevices'].forEach(fn => {
+                      if (typeof md[fn] === 'function') {
+                        md[fn] = async () => { throw new Error('WebRTC disabled'); };
+                      }
+                    });
+                  }
+                })();
+                """
+            )
             page = ctx.new_page()
             # 使用浏览器上下文直接 fetch 获取出口 IP 与真实 UA（验证浏览器代理是否生效）
             try:

@@ -13,20 +13,44 @@ from utils.retry import request_with_retry
 logger = logging.getLogger(__name__)
 
 
-def fetch_apps(user: Dict[str, str]) -> List[Dict]:
-    """获取用户 app 列表"""
+def fetch_apps(
+    user: Dict[str, str],
+    proxies: dict | None = None,
+    browser_context_args: dict = {},
+) -> List[Dict]:
+    """获取用户 app 列表（支持代理与UA）"""
     username = user["email"]
     password = user["password"]
     account_type = user["account_type"]
 
-    session = get_session(username, password)
+    # 携带代理与UA，保持与 data_service 一致
+    session = get_session(username, password, proxies=proxies, browser_context_args=browser_context_args)
 
     if account_type == "pid":
         url = cfg.HOME_APP_URL_PID
     else:
         url = cfg.HOME_APP_URL_PRT
 
-    headers = {"Referer": "https://hq1.appsflyer.com/apps/myapps"}
+    headers = {
+        "Referer": "https://hq1.appsflyer.com/apps/myapps",
+        "Origin": "https://hq1.appsflyer.com",
+        "Accept": "application/json, text/plain, */*",
+    }
+    # 更贴近前端请求形态的头部
+    headers.setdefault("Accept-Language", "en-US,en;q=0.9")
+    headers.setdefault("X-Requested-With", "XMLHttpRequest")
+
+    # 注入 XSRF Token（来自 aws-waf-token），安全读取避免重复同名 Cookie 引发错误
+    waf_token = None
+    try:
+        for _c in session.cookies:
+            if getattr(_c, "name", None) == "aws-waf-token":
+                waf_token = getattr(_c, "value", None)
+                break
+    except Exception as _e:
+        logger.debug("read waf token failed: %s", _e)
+    if waf_token:
+        headers["X-XSRF-TOKEN"] = waf_token
 
     resp = request_with_retry(session, "GET", url, headers=headers, timeout=30)
     resp.raise_for_status()
@@ -67,7 +91,7 @@ def fetch_apps(user: Dict[str, str]) -> List[Dict]:
 
 
 def fetch_app_by_pid(pid: str) -> List[Dict]:
-    """获取某个pid下的app列表并写入数据库，返回列表"""
+    """获取某个pid下的app列表并写入数据库，返回列表（带代理与UA）"""
     user = UserDAO.get_user_by_pid(pid)
     if not user:
         logger.error(f"User with pid={pid} not found.")
@@ -77,8 +101,19 @@ def fetch_app_by_pid(pid: str) -> List[Dict]:
     if recent_apps:
         return recent_apps
 
-    # 无缓存则实时查询并更新
-    apps = fetch_apps(user)
+    # 无缓存则实时查询并更新（带静态代理配置）
+    proxy_rec = UserProxyDAO.get_by_pid(pid)
+    proxies = None
+    browser_args = {}
+    if proxy_rec:
+        if proxy_rec.get("proxy_url"):
+            proxies = {"http": proxy_rec["proxy_url"], "https": proxy_rec["proxy_url"]}
+        if proxy_rec.get("ua"):
+            browser_args["user_agent"] = proxy_rec["ua"]
+        if proxy_rec.get("timezone_id"):
+            browser_args["timezone_id"] = proxy_rec["timezone_id"]
+
+    apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
     for app in apps:
         app["user_type_id"] = pid
     UserAppDAO.save_apps(apps)
@@ -86,7 +121,7 @@ def fetch_app_by_pid(pid: str) -> List[Dict]:
 
 
 def update_daily_apps():
-    """更新pid的app"""
+    """更新pid的app（批量，带代理与UA）"""
     user_proxies = UserProxyDAO.get_enable()
     if not user_proxies:
         logger.error(f"No enable user proxy found.")
@@ -96,6 +131,9 @@ def update_daily_apps():
     pids = [p.get("pid") for p in user_proxies if p.get("pid")]
     pid_user_map = UserDAO.get_users_by_pids(pids)
 
+    # 建立 pid 到代理记录的映射
+    proxy_map = {p.get("pid"): p for p in user_proxies if p.get("pid")}
+
     # 2) 准备一次性查询最近一天已更新过的用户名集合，减少逐用户检查
     users = [u for u in pid_user_map.values() if u]
     usernames = [u["email"] for u in users]
@@ -103,13 +141,27 @@ def update_daily_apps():
 
     # 3) 仅为未在最近一天更新过的用户抓取 app 列表
     all_apps: List[Dict] = []
-    for user in users:
+    # 迭代 (pid, user) 保证 user_type_id 正确设置，并根据 pid 查代理
+    for pid, user in pid_user_map.items():
+        if not user:
+            continue
         if user["email"] in recent_usernames:
             continue
-        
-        apps = fetch_apps(user)
+
+        proxy_rec = proxy_map.get(pid)
+        proxies = None
+        browser_args = {}
+        if proxy_rec:
+            if proxy_rec.get("proxy_url"):
+                proxies = {"http": proxy_rec["proxy_url"], "https": proxy_rec["proxy_url"]}
+            if proxy_rec.get("ua"):
+                browser_args["user_agent"] = proxy_rec["ua"]
+            if proxy_rec.get("timezone_id"):
+                browser_args["timezone_id"] = proxy_rec["timezone_id"]
+
+        apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
         for app in apps:
-            app["user_type_id"] = user.get("pid")
+            app["user_type_id"] = pid
         all_apps.extend(apps)
 
     # 4) 批量保存，减少 DB 操作
