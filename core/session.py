@@ -103,7 +103,11 @@ class SessionManager:
             password, ua = pwd_tuple
             logger.info("aws_waf_token 失效，尝试自动刷新 -> %s", username)
             try:
-                cookies, expired_at, ua_new = self._login_by_playwright(username, password, ua, )
+                cookies, expired_at, ua_new = self._login_by_playwright(
+                    username,
+                    password,
+                    {"user_agent": ua} if ua else {},
+                )
                 # 更新 DB
                 cookie_model.add_or_update_cookie(username=username, password=password, cookies=cookies,
                                                  expired_at=expired_at, user_agent=ua_new)
@@ -177,6 +181,11 @@ class SessionManager:
             
         browser = pw.chromium.launch(**launch_kwargs)
         try:
+            # 规范 browser_context_args 类型（支持传入 UA 字符串）
+            if not isinstance(browser_context_args, dict):
+                browser_context_args = {"user_agent": str(browser_context_args)}
+            else:
+                browser_context_args = browser_context_args or {}
             context_args = {
                 "viewport": {"width": 1920, "height": 1080},
                 "user_agent": browser_context_args.get("user_agent", PLAYWRIGHT["user_agent"]),
