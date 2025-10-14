@@ -260,7 +260,7 @@ class SessionManager:
                     """
                 )
                 ua_real = page.evaluate("() => navigator.userAgent")
-                logger.info("Browser proxy check -> exit_ip=%s real_ua=%s", ip_val, ua_real)
+                logger.info("Browser proxy check -> exit_ip=%s real_ua=%s proxies=%s", ip_val, ua_real, proxies)
             except Exception as _e:
                 logger.debug("browser proxy check failed: %s", _e)
             
