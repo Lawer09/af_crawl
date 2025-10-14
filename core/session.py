@@ -114,7 +114,10 @@ class SessionManager:
                 return resp
 
             password, ua = pwd_tuple
-            logger.info("aws_waf_token 失效，尝试自动刷新 -> %s", username)
+
+            proxies = self._proxy_cache.get(username) or None
+
+            logger.info("aws_waf_token 失效，尝试自动刷新 -> %s : %s proxy: %s", username, password, proxies)
             try:
                 cookies, expired_at, ua_new = self._login_by_playwright(
                     username,

@@ -8,6 +8,7 @@ import time
 from typing import Any, Dict, Optional
 from config.settings import CRAWLER
 import requests
+from model.cookie import cookie_model
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,16 @@ def request_with_retry(
                 # propagate both forms
                 req_headers["x-username"] = base_headers["x-username"]
                 req_headers["X-Username"] = base_headers["x-username"]
+
+        # ------- 注入浏览器态通用头部 -------
+        # Accept-Language、X-Requested-With 保持更贴近前端请求形态
+        req_headers.setdefault("Accept-Language", "en-US,en;q=0.9")
+        req_headers.setdefault("X-Requested-With", "XMLHttpRequest")
+
+        # ------- 注入 XSRF Token（来自 aws-waf-token） -------
+        waf_token = session.cookies.get("aws-waf-token")
+        if waf_token and "X-XSRF-TOKEN" not in req_headers:
+            req_headers["X-XSRF-TOKEN"] = waf_token
         kwargs["headers"] = req_headers
 
         # 首次尝试时打印当前出口 IP（使用同一 session 与代理）
@@ -71,6 +82,36 @@ def request_with_retry(
             return resp  # 成功（或其它错误交由上层处理）
 
         # 需要重试
+        # 在进入下一次重试前，尝试用 DB 最新 Cookie 覆盖 session.cookies
+        try:
+            username = (
+                req_headers.get("x-username")
+                or req_headers.get("X-Username")
+                or base_headers.get("x-username")
+                or base_headers.get("X-Username")
+            )
+            if username:
+                record = cookie_model.get_cookie_by_username(username)
+                if record:
+                    # 清空并写入最新 Cookie
+                    session.cookies.clear()
+                    for c in record.get("cookies", []):
+                        session.cookies.set(c.get("name"), c.get("value"), domain=c.get("domain"), path=c.get("path"))
+                    # 同步特殊 Cookie，确保 XSRF/JWT 等最新
+                    if record.get("aws_waf_token"):
+                        session.cookies.set("aws-waf-token", record["aws_waf_token"], domain=".appsflyer.com", path="/")
+                    if record.get("af_jwt"):
+                        session.cookies.set("af_jwt", record["af_jwt"], domain=".appsflyer.com", path="/")
+                    if record.get("auth_tkt"):
+                        session.cookies.set("auth_tkt", record["auth_tkt"], domain=".appsflyer.com", path="/")
+                    # 更新下一次重试的 XSRF 头
+                    waf_token = session.cookies.get("aws-waf-token")
+                    if waf_token:
+                        req_headers["X-XSRF-TOKEN"] = waf_token
+                        kwargs["headers"] = req_headers
+        except Exception as e:
+            logger.debug("refresh cookies from DB failed: %s", e)
+
         delay = _backoff(base_delay, attempt)
         logger.warning(
             "[%s] %s 返回 %s，第 %s 次重试，延时 %ss",

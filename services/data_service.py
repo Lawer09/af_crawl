@@ -22,6 +22,15 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
         "Content-Type": "application/json;charset=UTF-8",
     }
 
+    # 更贴近前端请求形态的头部
+    headers.setdefault("Accept-Language", "en-US,en;q=0.9")
+    headers.setdefault("X-Requested-With", "XMLHttpRequest")
+
+    # 注入 XSRF Token（来自 aws-waf-token），如果存在
+    waf_token = session.cookies.get("aws-waf-token")
+    if waf_token:
+        headers["X-XSRF-TOKEN"] = waf_token
+
     payload = cfg.NEW_TABLE_API_PARAM.copy()
     payload["dates"] = {"start": start_date, "end": end_date}
     payload["filters"]["app-id"] = [app_id]
