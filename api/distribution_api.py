@@ -97,6 +97,7 @@ def get_user_app_data(task: dict):
 def get_user_app_data_by_pid(
     pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
     app_id: str = Query(..., description="应用ID"),
+    aff_id: str = Query(None, description="aff ID"),
     offer_id: Optional[str] = Query(None, description="offer ID（可选）"),
     start_date: str = Query(..., description="开始日期，YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期，YYYY-MM-DD")
@@ -106,6 +107,7 @@ def get_user_app_data_by_pid(
         rows = fetch_by_pid_and_offer_id(
             pid=pid,
             app_id=app_id,
+            aff_id=aff_id,
             offer_id=offer_id,
             start_date=start_date,
             end_date=end_date,

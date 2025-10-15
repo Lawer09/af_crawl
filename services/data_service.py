@@ -11,7 +11,7 @@ from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
-def fetch_user_app_data(username: str, password:str, app_id: str, start_date: str, end_date: str, proxies: dict | None = None, browser_context_args: dict = {}):
+def fetch_user_app_data(username: str, password:str, app_id: str, start_date: str, end_date: str, aff_id:str | None = None, proxies: dict | None = None, browser_context_args: dict = {}):
     """ 获取某个用户下的某个app的指定日期的数据 """
 
     session = get_session(username, password, proxies=proxies, browser_context_args=browser_context_args)   
@@ -41,9 +41,11 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
 
     payload = cfg.NEW_TABLE_API_PARAM.copy()
     payload["dates"] = {"start": start_date, "end": end_date}
-    payload["filters"]["app-id"] = [app_id]
-    # 保留 cfg 里的 groupings 结构（对象形式），仅在需要时可动态修改
+    payload["filters"]["app-id"] = [app_id] # 指定app包
+    if aff_id:
+        payload["filters"]["adgroup-id"] = [aff_id]  # 将 ad_id 作为渠道id
 
+    # 保留 cfg 里的 groupings 结构（对象形式），仅在需要时可动态修改
     resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
     resp.raise_for_status()
     try:
@@ -79,6 +81,7 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
             "username": username,
             "app_id": app_id,
             "offer_id": adset_value,
+            "aff_id": aff_id,
             "af_clicks": adset.get("filtersGranularityMetricIdClicksPeriod", 0),
             "af_installs": adset.get("attributionSourceAppsflyerFiltersGranularityMetricIdInstallsUaPeriod", 0),
             "start_date": start_date,
@@ -88,7 +91,7 @@ def fetch_user_app_data(username: str, password:str, app_id: str, start_date: st
     return rows
 
 
-def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str):
+def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
     """ 获取某个用户下的某个pid的指定日期的数据 """
 
     user = UserDAO.get_user_by_pid(pid)
@@ -108,13 +111,13 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str):
     } if proxy else {}
 
     rows = fetch_user_app_data(
-        username, password, app_id, start_date, end_date,
+        username, password, app_id, start_date, end_date, aff_id,
         proxies=proxies, browser_context_args=browser_context_args
     )
     return rows
 
 
-def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str):
+def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
     """优先返回最近1小时内的缓存数据；否则查询并落库后返回。"""
 
     # 1. 先查 DB 缓存（最近 60 分钟）
@@ -123,9 +126,10 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str)
         return cached
 
     # 2. 无缓存则实时查询
-    rows = fetch_by_pid(pid, app_id, start_date, end_date)
+    rows = fetch_by_pid(pid, app_id, start_date, end_date, aff_id)
     for row in rows:
         row['pid'] = pid
+
     # 3. 落库
     UserAppDataDAO.save_data_bulk(rows)
     return rows

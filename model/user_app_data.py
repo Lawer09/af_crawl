@@ -18,6 +18,7 @@ class UserAppDataDAO:
         pid VARCHAR(50) NOT NULL,
         app_id VARCHAR(128) NOT NULL,
         offer_id VARCHAR(128) NOT NULL,
+        aff_id VARCHAR(128) NULL,
         af_clicks INT DEFAULT 0,
         af_installs INT DEFAULT 0,
         start_date DATE NOT NULL,
@@ -38,12 +39,12 @@ class UserAppDataDAO:
         cls.init_table()
         sql = f"""
         INSERT INTO {cls.TABLE}
-            (username, pid, app_id, offer_id, af_clicks, af_installs, start_date, end_date, days, created_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+            (username, pid, app_id, offer_id, aff_id, af_clicks, af_installs, start_date, end_date, days, created_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
         """
         params = [
             (
-                d["username"], d.get("pid"), d["app_id"], d["offer_id"], d["af_clicks"], d["af_installs"],
+                d["username"], d.get("pid"), d["app_id"], d["offer_id"], d.get("aff_id"), d["af_clicks"], d["af_installs"], 
                 d["start_date"], d["end_date"], d["days"],
             )
             for d in datas
@@ -51,18 +52,19 @@ class UserAppDataDAO:
         mysql_pool.executemany(sql, params)
 
     @classmethod
-    def get_recent_rows(cls, pid: str, app_id: str, start_date: str, end_date: str, within_minutes: int = 60) -> List[Dict]:
+    def get_recent_rows(cls, pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None, within_minutes: int = 60) -> List[Dict]: 
         """查询在最近 within_minutes 分钟内生成的缓存数据。
         精确匹配 pid、app_id、start_date、end_date。
         """
         cls.init_table()
         sql = f"""
-        SELECT username, pid, app_id, offer_id, af_clicks, af_installs, start_date, end_date, days, created_at
+        SELECT username, pid, app_id, offer_id, aff_id, af_clicks, af_installs, start_date, end_date, days, created_at
         FROM {cls.TABLE}
         WHERE pid = %s AND app_id = %s AND start_date = %s AND end_date = %s
+          AND aff_id = %s
           AND created_at >= NOW() - INTERVAL %s MINUTE
         """
-        rows = mysql_pool.select(sql, (pid, app_id, start_date, end_date, within_minutes))
+        rows = mysql_pool.select(sql, (pid, app_id, start_date, end_date, aff_id, within_minutes))
         return rows or []
 
     # -------- 活跃度 ---------
