@@ -199,7 +199,7 @@ main() {
     case "$cmd" in
         "sync_apps") echo "[$(timestamp)] 开始同步用户应用列表..." ;;
         "sync_data") echo "[$(timestamp)] 开始同步应用数据..." ;;
-        "web") echo "[$(timestamp)] 启动Web管理界面..."; echo "[$(timestamp)] 访问地址: http://localhost:8880" ;;
+        "web") echo "[$(timestamp)] 启动Web API..."; echo "[$(timestamp)] 访问地址: http://localhost:8880" ;;
         "cron") echo "[$(timestamp)] 启动统一定时任务..." ;;
         "distribute")
             case "$subcmd" in
