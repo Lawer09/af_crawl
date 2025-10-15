@@ -146,9 +146,10 @@ def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str | None = None
     return rows
 
 
-def fetch_with_overall_report_counts(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None, offer_id: str | None = None,):
-    """返回包含 AF 数据与 overall_report_count 的 clicks/installation 以及 gap(af_clicks/clicks) 百分比。"""
-    rows = fetch_by_pid_and_offer_id(pid, app_id, offer_id, start_date, end_date, aff_id)
+def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: str | None = None, offer_id: str | None = None,):
+    """返回指定 date 的 AF 数据与 overall_report_count 的 clicks/installation 以及 gap(af_clicks/clicks) 百分比。"""
+    # AF侧按单日查询
+    rows = fetch_by_pid_and_offer_id(pid, app_id, offer_id, date, date, aff_id)
 
     enriched: List[Dict] = []
     for row in rows:
@@ -166,7 +167,7 @@ def fetch_with_overall_report_counts(pid: str, app_id: str, start_date: str, end
 
         clicks_install = {"clicks": 0, "installation": 0}
         if offer_id is not None:
-            clicks_install = OverallReportCountDAO.get_counts(pid, offer_id, aff_int)
+            clicks_install = OverallReportCountDAO.get_counts(pid, offer_id, aff_int, date)
 
         clicks = int(clicks_install.get("clicks", 0) or 0)
         installation = int(clicks_install.get("installation", 0) or 0)

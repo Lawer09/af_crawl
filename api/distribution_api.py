@@ -128,18 +128,16 @@ def get_user_app_data_gap_by_pid(
     app_id: str = Query(..., description="应用ID"),
     aff_id: Optional[str] = Query(None, description="aff ID（可选）"),
     offer_id: Optional[str] = Query(None, description="offer ID（可选）"),
-    start_date: str = Query(..., description="开始日期，YYYY-MM-DD"),
-    end_date: str = Query(..., description="结束日期，YYYY-MM-DD")
+    date: str = Query(..., description="日期，YYYY-MM-DD")
 ):
-    """通过 pid 获取账号信息后拉取用户 app 数据"""
+    """通过 pid 获取账号信息后拉取指定日期的用户 app 数据及gap。"""
     try:
         rows = fetch_with_overall_report_counts(
             pid=pid,
             app_id=app_id,
             aff_id=aff_id,
             offer_id=offer_id,
-            start_date=start_date,
-            end_date=end_date,
+            date=date,
         )
         
         return {"status": "success", "rows": rows}
