@@ -41,10 +41,12 @@ class SessionManager:
         if record and not self._is_expired(record["expired_at"]):
             logger.info("cookie hit -> %s", username)
             # 缓存密码供后续刷新使用
-            self._pwd_cache[username] = (password, browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"])
+            ua_cfg = browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"]
+            ua_cfg = self._sanitize_user_agent(ua_cfg)
+            self._pwd_cache[username] = (password, ua_cfg)
             sess = self._build_requests_session(
                 record["cookies"],
-                browser_context_args.get("user_agent", record.get("user_agent")) or PLAYWRIGHT["user_agent"],
+                ua_cfg,
                 username,
             )
             # 命中缓存也携带代理
@@ -55,18 +57,20 @@ class SessionManager:
         # --- 登录重试 ---
         cookies = None
         expired_at = None
-        ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
+        ua = self._sanitize_user_agent(browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]) 
         max_attempts = 2
         for attempt in range(max_attempts):
             try:
                 logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt + 1)
-                cookies, expired_at, ua = self._login_by_playwright(username, password, browser_context_args, proxies)
+                bc_args = dict(browser_context_args or {})
+                bc_args["user_agent"] = ua
+                cookies, expired_at, ua = self._login_by_playwright(username, password, bc_args, proxies)
                 break
             except Exception as e:
                 # 特殊处理 UA 非法字符错误：展示 UA 并直接终止登录尝试
                 if "Invalid characters found in userAgent" in str(e):
                     bad_ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
-                    logger.error("Invalid User-Agent detected, abort login -> username=%s ua=%s", username, bad_ua)
+                    logger.error("Invalid User-Agent detected, abort login -> username=%s ua=%r", username, bad_ua)
                     raise
                 logger.warning("login failed #%s -> %s", attempt + 1, e)
                 # 最后一轮仍失败则抛出，避免后续使用未初始化变量
@@ -80,14 +84,14 @@ class SessionManager:
             password=password,
             cookies=cookies,
             expired_at=expired_at,
-            user_agent=browser_context_args.get("user_agent", ua),
+            user_agent=ua,
         )
 
-        sess = self._build_requests_session(cookies, browser_context_args.get("user_agent", ua), username)
+        sess = self._build_requests_session(cookies, ua, username)
         if proxies:
             sess.proxies.update(proxies)
         # 缓存密码供刷新
-        self._pwd_cache[username] = (password, browser_context_args.get("user_agent", ua))
+        self._pwd_cache[username] = (password, ua)
         # 缓存代理供刷新沿用
         self._proxy_cache[username] = proxies
         return sess
@@ -96,12 +100,22 @@ class SessionManager:
     def _is_expired(self, expired_at: datetime) -> bool:
         return expired_at <= datetime.now()
 
+    def _sanitize_user_agent(self, ua: Optional[str]) -> Optional[str]:
+        if not ua:
+            return ua
+        try:
+            cleaned = ''.join(ch for ch in str(ua) if 32 <= ord(ch) <= 126)
+            cleaned = ' '.join(cleaned.split())
+            return cleaned.strip()
+        except Exception:
+            return str(ua).strip()
+
     def _build_requests_session(self, cookies: list, user_agent: str | None, username: str | None = None) -> requests.Session:
         s = requests.Session()
         for c in cookies:
             s.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path"))
         if user_agent:
-            s.headers.update({"User-Agent": user_agent})
+            s.headers.update({"User-Agent": self._sanitize_user_agent(user_agent)})
         if username:
             s.headers.update({"x-username": username, "X-Username": username})
 
@@ -220,9 +234,13 @@ class SessionManager:
                 browser_context_args = {"user_agent": str(browser_context_args)}
             else:
                 browser_context_args = browser_context_args or {}
+            ua_raw = browser_context_args.get("user_agent", PLAYWRIGHT["user_agent"]) or PLAYWRIGHT["user_agent"]
+            ua_safe = self._sanitize_user_agent(ua_raw)
+            if ua_safe != ua_raw:
+                logger.debug("Sanitized UA -> username=%s before=%r after=%r", username, ua_raw, ua_safe)
             context_args = {
                 "viewport": {"width": 1920, "height": 1080},
-                "user_agent": browser_context_args.get("user_agent", PLAYWRIGHT["user_agent"]),
+                "user_agent": ua_safe or PLAYWRIGHT["user_agent"],
                 "locale": "en-US",
                 "timezone_id": browser_context_args.get("timezone_id", PLAYWRIGHT["timezone_id"]),
             }
