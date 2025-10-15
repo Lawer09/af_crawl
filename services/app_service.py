@@ -52,7 +52,12 @@ def fetch_apps(
     if waf_token:
         headers["X-XSRF-TOKEN"] = waf_token
 
-    resp = request_with_retry(session, "GET", url, headers=headers, timeout=30)
+    try:
+        resp = request_with_retry(session, "GET", url, headers=headers, timeout=30)
+    except Exception as e:
+        # 连续 202（排队/限流）或其他网络层异常：记录并跳过，避免中断批次
+        logger.warning("fetch_apps request failed for %s -> %s; skip", username, e)
+        return []
     resp.raise_for_status()
     try:
         data = resp.json()
@@ -174,10 +179,15 @@ def update_daily_apps():
             if proxy_rec.get("timezone_id"):
                 browser_args["timezone_id"] = proxy_rec["timezone_id"]
 
-        apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
-        for app in apps:
-            app["user_type_id"] = pid
-        all_apps.extend(apps)
+        try:
+            apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
+            for app in apps:
+                app["user_type_id"] = pid
+            all_apps.extend(apps)
+        except Exception as e:
+            # 单用户异常不影响整批次，记录并跳过
+            logger.exception("update_daily_apps user failed: pid=%s username=%s -> %s", pid, user.get("email"), e)
+            continue
 
     # 4) 批量保存，减少 DB 操作
     UserAppDAO.save_apps(all_apps)

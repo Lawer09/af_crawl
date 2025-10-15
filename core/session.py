@@ -53,14 +53,19 @@ class SessionManager:
             self._proxy_cache[username] = proxies
             return sess
         # --- 登录重试 ---
-        for attempt in range(2):
+        cookies = None
+        expired_at = None
+        ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
+        max_attempts = 2
+        for attempt in range(max_attempts):
             try:
-                logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt+1)
+                logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt + 1)
                 cookies, expired_at, ua = self._login_by_playwright(username, password, browser_context_args, proxies)
                 break
             except Exception as e:
-                logger.warning("login failed #%s -> %s", attempt+1, e)
-                if attempt == 2:
+                logger.warning("login failed #%s -> %s", attempt + 1, e)
+                # 最后一轮仍失败则抛出，避免后续使用未初始化变量
+                if attempt == max_attempts - 1:
                     raise
                 time.sleep(15 * (attempt + 1))
 

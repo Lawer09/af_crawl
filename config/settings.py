@@ -64,6 +64,10 @@ CRAWLER = {
     'threads_per_process': _thread_default,
     'max_retry': int(os.getenv('CRAWLER_MAX_RETRY', '5')),  # 增加重试次数
     'retry_delay_seconds': int(os.getenv('CRAWLER_RETRY_DELAY', '300')),  
+    # 在 202 且响应未带新 token 时，是否轻量 GET 登录页播种 aws-waf-token
+    'seed_waf_on_202': os.getenv('SEED_WAF_ON_202', 'true').lower() in ('true','1','yes'),
+    # 播种节流（同一用户名最小间隔秒数）
+    'seed_waf_cooldown_seconds': int(os.getenv('SEED_WAF_COOLDOWN_SECONDS', '180')),
 }
 
 # 其他常量
