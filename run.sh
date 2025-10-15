@@ -124,21 +124,32 @@ validate_command() {
     esac
 }
 
-# 读取参数（支持--background选项）
-CMD=$1
-SUBCMD=$2
-shift 2 2>/dev/null || shift $# 2>/dev/null  # 移除前两个参数
-EXTRA_ARGS="$@"
-
-# 检查是否需要后台运行
+# 优先处理脚本自身选项（--background）
 BACKGROUND=0
-if [[ " $EXTRA_ARGS " =~ " --background " ]]; then
-    BACKGROUND=1
-    # 从参数中移除--background
-    EXTRA_ARGS=${EXTRA_ARGS//--background/}
-    EXTRA_ARGS=$(echo "$EXTRA_ARGS" | xargs)  # 清理多余空格
+# 临时存储所有参数，用于过滤
+ALL_ARGS=("$@")
+
+# 检查是否包含--background选项
+for arg in "${ALL_ARGS[@]}"; do
+    if [ "$arg" = "--background" ]; then
+        BACKGROUND=1
+        # 从参数列表中移除--background
+        ALL_ARGS=("${ALL_ARGS[@]/--background}")
+    fi
+done
+
+# 重新解析命令、子命令和额外参数（已移除--background）
+CMD=${ALL_ARGS[0]:-""}
+SUBCMD=${ALL_ARGS[1]:-""}
+
+# 提取剩余参数（排除CMD和SUBCMD）
+if [ ${#ALL_ARGS[@]} -ge 2 ]; then
+    EXTRA_ARGS=("${ALL_ARGS[@]:2}")
+else
+    EXTRA_ARGS=()
 fi
 
+# 如果没有命令，交互输入
 if [ -z "$CMD" ]; then
     echo "请输入要执行的命令:"
     echo "可用命令: sync_apps, sync_data, web, cron, distribute"
