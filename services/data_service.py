@@ -135,10 +135,10 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
     return rows
 
 
-def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str, start_date: str, end_date: str):
+def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str | None = None, start_date: str = None, end_date: str = None, aff_id: str | None = None):
     """ 获取某个pid下的某个app的指定日期的数据 """
     rows = try_get_and_save_data(
-        pid, app_id, start_date, end_date
+        pid, app_id, start_date, end_date, aff_id
     )
     if offer_id:
         rows = list(filter(lambda x: x["offer_id"] == offer_id, rows))
