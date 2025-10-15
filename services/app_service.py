@@ -167,7 +167,8 @@ def update_daily_apps():
             continue
         if user["email"] in recent_usernames:
             continue
-
+        
+        logger.info("Start fetch apps: pid=%s username=%s", pid, user.get("email"))
         proxy_rec = proxy_map.get(pid)
         proxies = None
         browser_args = {}

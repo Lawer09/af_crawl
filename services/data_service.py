@@ -5,6 +5,7 @@ import logging
 import config.af_config as cfg
 from services.login_service import get_session
 from model.user_app_data import UserAppDataDAO
+from model.overall_report_count import OverallReportCountDAO
 from model.user_app import UserAppDAO
 from model.user import UserDAO, UserProxyDAO
 from utils.retry import request_with_retry
@@ -143,6 +144,45 @@ def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str | None = None
     if offer_id:
         rows = list(filter(lambda x: x["offer_id"] == offer_id, rows))
     return rows
+
+
+def fetch_with_overall_report_counts(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None, offer_id: str | None = None,):
+    """返回包含 AF 数据与 overall_report_count 的 clicks/installation 以及 gap(af_clicks/clicks) 百分比。"""
+    rows = fetch_by_pid_and_offer_id(pid, app_id, offer_id, start_date, end_date, aff_id)
+
+    enriched: List[Dict] = []
+    for row in rows:
+        # 解析 offer_id/aff_id
+        offer_id_str = row.get("offer_id")
+        offer_id = int(offer_id_str) if isinstance(offer_id_str, str) and offer_id_str.isdigit() else (
+            int(offer_id_str) if isinstance(offer_id_str, (int,)) else None
+        )
+        aff_val = row.get("aff_id", aff_id)
+        aff_int = None
+        if isinstance(aff_val, str) and aff_val.isdigit():
+            aff_int = int(aff_val)
+        elif isinstance(aff_val, int):
+            aff_int = aff_val
+
+        clicks_install = {"clicks": 0, "installation": 0}
+        if offer_id is not None:
+            clicks_install = OverallReportCountDAO.get_counts(pid, offer_id, aff_int)
+
+        clicks = int(clicks_install.get("clicks", 0) or 0)
+        installation = int(clicks_install.get("installation", 0) or 0)
+        af_clicks = int(row.get("af_clicks", 0) or 0)
+
+        # 计算 gap 百分比（保留两位小数）
+        gap = round((af_clicks / clicks * 100.0), 2) if clicks > 0 else 0.0
+
+        enriched.append({
+            **row,
+            "clicks": clicks,
+            "installation": installation,
+            "gap": gap,
+        })
+
+    return enriched
 
 
 def update_daily_data():

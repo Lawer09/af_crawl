@@ -14,7 +14,7 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
-from services.data_service import fetch_user_app_data, fetch_by_pid_and_offer_id
+from services.data_service import fetch_user_app_data, fetch_by_pid_and_offer_id,fetch_with_overall_report_counts
 from services.app_service import fetch_app_by_pid
 
 logger = logging.getLogger(__name__)
@@ -121,8 +121,38 @@ def get_user_app_data_by_pid(
         logger.exception(f"Error fetching user app data by pid: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/user/app/data/gap")
+def get_user_app_data_gap_by_pid(
+    pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
+    app_id: str = Query(..., description="应用ID"),
+    aff_id: Optional[str] = Query(None, description="aff ID（可选）"),
+    offer_id: Optional[str] = Query(None, description="offer ID（可选）"),
+    start_date: str = Query(..., description="开始日期，YYYY-MM-DD"),
+    end_date: str = Query(..., description="结束日期，YYYY-MM-DD")
+):
+    """通过 pid 获取账号信息后拉取用户 app 数据"""
+    try:
+        rows = fetch_with_overall_report_counts(
+            pid=pid,
+            app_id=app_id,
+            aff_id=aff_id,
+            offer_id=offer_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        
+        return {"status": "success", "rows": rows}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching user app data by pid: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/user/app")
-def get_user_app_data_by_pid(
+def get_user_app_by_pid(
     pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
 ):
     """通过 pid 获取用户 app 列表"""

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # AppsFlyer 爬虫系统启动脚本
-# 支持传统模式和分布式模式
+# 支持传统模式、分布式模式及后台运行
 
 set -e
 set -o pipefail
@@ -51,9 +51,12 @@ timestamp() {
   date +"%Y-%m-%d %H:%M:%S"
 }
 
-# 显示使用帮助
+# 显示使用帮助（新增--background说明）
 show_help() {
-    echo "使用方法: $0 <命令> [参数...]"
+    echo "使用方法: $0 <命令> [参数...] [--background]"
+    echo ""
+    echo "通用选项:"
+    echo "  --background                  - 后台运行程序（终端关闭后继续执行）"
     echo ""
     echo "支持的命令:"
     echo "  传统模式:"
@@ -86,17 +89,10 @@ show_help() {
     echo "    --enable-monitoring         - 启用性能监控（standalone模式）"
     echo "    --config FILE               - 配置文件路径"
     echo ""
-    echo "示例:"
-    echo "  $0 sync_apps"
-    echo "  $0 sync_data --days 7"
-    echo "  $0 web"
-    echo "  $0 cron --apps --apps-interval-minutes 60"
-    echo "  $0 cron --data --data-interval-hours 24"
-    echo "  $0 cron --apps --data"
-    echo "  $0 distribute master --device-id master-001 --port 7989"
-    echo "  $0 distribute worker --device-id worker-001 --master-host 192.168.1.100"
-    echo "  $0 distribute standalone --concurrent-tasks 3 --enable-monitoring"
-    echo "  $0 distribute status --master-host 192.168.1.100"
+    echo "示例 (后台运行):"
+    echo "  $0 sync_apps --background"
+    echo "  $0 web --background"
+    echo "  $0 distribute standalone --concurrent-tasks 3 --background"
 }
 
 # 验证命令
@@ -128,18 +124,25 @@ validate_command() {
     esac
 }
 
-
-
-# 读取要传给python的命令参数，没传则交互输入
+# 读取参数（支持--background选项）
 CMD=$1
 SUBCMD=$2
-shift 2 2>/dev/null || shift $# 2>/dev/null  # 移除前两个参数，剩余的作为额外参数
+shift 2 2>/dev/null || shift $# 2>/dev/null  # 移除前两个参数
 EXTRA_ARGS="$@"
+
+# 检查是否需要后台运行
+BACKGROUND=0
+if [[ " $EXTRA_ARGS " =~ " --background " ]]; then
+    BACKGROUND=1
+    # 从参数中移除--background
+    EXTRA_ARGS=${EXTRA_ARGS//--background/}
+    EXTRA_ARGS=$(echo "$EXTRA_ARGS" | xargs)  # 清理多余空格
+fi
 
 if [ -z "$CMD" ]; then
     echo "请输入要执行的命令:"
     echo "可用命令: sync_apps, sync_data, web, cron, distribute"
-    echo "使用 --help 查看详细帮助"
+    echo "使用 --help 查看详细帮助，添加 --background 可后台运行"
     read -r CMD
     
     if [ "$CMD" = "distribute" ]; then
@@ -161,9 +164,8 @@ if ! validate_command "$CMD" "$SUBCMD"; then
     exit 1
 fi
 
-# 主逻辑
+# 主逻辑（支持后台运行）
 main() {
-    # 获取命令和子命令
     local cmd="$CMD"
     local subcmd="$SUBCMD"
     
@@ -172,8 +174,6 @@ main() {
     if [ -n "$subcmd" ]; then
         python_args+=("$subcmd")
     fi
-    
-    # 添加额外参数
     if [ -n "$EXTRA_ARGS" ]; then
         python_args+=($EXTRA_ARGS)
     fi
@@ -183,57 +183,44 @@ main() {
     echo "[$(timestamp)] 日志文件: $LOG_FILE"
     echo "[$(timestamp)] ==========================================="
     
-    # 根据命令类型提供特定信息
+    # 命令类型提示
     case "$cmd" in
-        "sync_apps")
-            echo "[$(timestamp)] 开始同步用户应用列表..."
-            ;;
-        "sync_data")
-            echo "[$(timestamp)] 开始同步应用数据..."
-            ;;
-        "web")
-            echo "[$(timestamp)] 启动Web管理界面..."
-            echo "[$(timestamp)] 访问地址: http://localhost:8880"
-            ;;
-        "cron")
-            echo "[$(timestamp)] 启动统一定时任务..."
-            echo "[$(timestamp)] 可选项: --apps/--data 以及间隔参数"
-            ;;
+        "sync_apps") echo "[$(timestamp)] 开始同步用户应用列表..." ;;
+        "sync_data") echo "[$(timestamp)] 开始同步应用数据..." ;;
+        "web") echo "[$(timestamp)] 启动Web管理界面..."; echo "[$(timestamp)] 访问地址: http://localhost:8880" ;;
+        "cron") echo "[$(timestamp)] 启动统一定时任务..." ;;
         "distribute")
             case "$subcmd" in
-                "master")
-                    echo "[$(timestamp)] 启动分布式主节点..."
-                    echo "[$(timestamp)] 主节点将负责任务调度和分发"
-                    ;;
-                "worker")
-                    echo "[$(timestamp)] 启动分布式工作节点..."
-                    echo "[$(timestamp)] 工作节点将连接到主节点执行任务"
-                    ;;
-                "standalone")
-                    echo "[$(timestamp)] 启动独立节点..."
-                    echo "[$(timestamp)] 独立节点集成了主节点和工作节点功能"
-                    ;;
-                "status")
-                    echo "[$(timestamp)] 查询系统状态..."
-                    ;;
+                "master") echo "[$(timestamp)] 启动分布式主节点..." ;;
+                "worker") echo "[$(timestamp)] 启动分布式工作节点..." ;;
+                "standalone") echo "[$(timestamp)] 启动独立节点..." ;;
+                "status") echo "[$(timestamp)] 查询系统状态..." ;;
             esac
             ;;
     esac
     
-    # 运行python脚本，输出带时间戳写入日志，也打印到终端
-    eval "$command_str" 2>&1 | while IFS= read -r line; do
-        echo "[$(timestamp)] $line" | tee -a "$LOG_FILE"
-    done
-    
-    local exit_code=${PIPESTATUS[0]}
-    
-    if [ $exit_code -eq 0 ]; then
-        echo "[$(timestamp)] 命令执行完成"
+    # 执行命令（区分前台/后台）
+    if [ $BACKGROUND -eq 1 ]; then
+        # 后台运行：用nohup确保终端关闭后继续运行，输出重定向到日志
+        nohup sh -c "$command_str 2>&1 | while IFS= read -r line; do echo \"[\$(timestamp)] \$line\"; done >> \"$LOG_FILE\" 2>&1" &
+        local PID=$!  # 获取后台进程ID
+        echo "[$(timestamp)] 程序已在后台启动，进程ID: $PID"
+        echo "[$(timestamp)] 停止程序可执行: kill $PID"
+        echo "[$(timestamp)] 查看日志: tail -f $LOG_FILE"
     else
-        echo "[$(timestamp)] 命令执行失败，退出码: $exit_code"
+        # 前台运行：保持终端输出
+        eval "$command_str" 2>&1 | while IFS= read -r line; do
+            echo "[$(timestamp)] $line" | tee -a "$LOG_FILE"
+        done
+        local exit_code=${PIPESTATUS[0]}
+        
+        if [ $exit_code -eq 0 ]; then
+            echo "[$(timestamp)] 命令执行完成"
+        else
+            echo "[$(timestamp)] 命令执行失败，退出码: $exit_code"
+        fi
+        return $exit_code
     fi
-    
-    return $exit_code
 }
 
 # 执行主函数
