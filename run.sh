@@ -45,6 +45,7 @@ fi
 # 获取当前脚本所在目录（无论从哪里执行）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="$SCRIPT_DIR/run.log"
+PID_FILE="$SCRIPT_DIR/run.pid"
 
 # 获取时间戳函数
 timestamp() {
@@ -213,10 +214,12 @@ main() {
     # 执行命令（区分前台/后台）
     if [ $BACKGROUND -eq 1 ]; then
         # 后台运行：用nohup确保终端关闭后继续运行，输出重定向到日志
-        # 注意：在子shell中无法访问当前shell定义的函数，这里改为直接使用 date 生成时间戳
-        nohup sh -c "$command_str 2>&1 | while IFS= read -r line; do printf '[%s] %s\n' \"\$(date '+%Y-%m-%d %H:%M:%S')\" \"\$line\"; done >> \"$LOG_FILE\" 2>&1" &
+        # 在子shell中直接使用 date 生成时间戳，并同时打印子shellPID，便于后续定位与关闭
+        nohup sh -c "PID_TAG=\$$; $command_str 2>&1 | while IFS= read -r line; do printf '[%s][%s] %s\n' \"\$(date '+%Y-%m-%d %H:%M:%S')\" \"$PID_TAG\" \"\$line\"; done >> \"$LOG_FILE\" 2>&1" &
         local PID=$!  # 获取后台进程ID
+        echo "$PID" > "$PID_FILE"
         echo "[$(timestamp)] 程序已在后台启动，进程ID: $PID"
+        echo "[$(timestamp)] 后台PID已写入: $PID_FILE"
         echo "[$(timestamp)] 停止程序可执行: kill $PID"
         echo "[$(timestamp)] 查看日志: tail -f $LOG_FILE"
     else

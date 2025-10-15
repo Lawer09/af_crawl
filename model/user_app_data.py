@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from core.db import mysql_pool
 
@@ -65,6 +65,27 @@ class UserAppDataDAO:
           AND created_at >= NOW() - INTERVAL %s MINUTE
         """
         rows = mysql_pool.select(sql, (pid, app_id, start_date, end_date, aff_id, within_minutes))
+        return rows or []
+
+    @classmethod
+    def get_rows_by_date(cls, pid: str, app_id: str, start_date: str, end_date: str, aff_id: Optional[str] = None) -> List[Dict]:
+        """返回指定日期范围（通常为同一天）的缓存数据，按创建时间降序。
+        - 当 aff_id 提供时进行过滤；未提供则不限制渠道。
+        - 不进行 "最近N分钟" 限制，适用于前天仅取缓存的场景。
+        """
+        cls.init_table()
+        base_sql = [
+            f"SELECT username, pid, app_id, offer_id, aff_id, af_clicks, af_installs, start_date, end_date, days, created_at",
+            f"FROM {cls.TABLE}",
+            "WHERE pid = %s AND app_id = %s AND start_date = %s AND end_date = %s",
+        ]
+        params: List = [pid, app_id, start_date, end_date]
+        if aff_id is not None:
+            base_sql.append("AND aff_id = %s")
+            params.append(aff_id)
+        base_sql.append("ORDER BY created_at DESC")
+        sql = "\n".join(base_sql)
+        rows = mysql_pool.select(sql, tuple(params))
         return rows or []
 
     # -------- 活跃度 ---------

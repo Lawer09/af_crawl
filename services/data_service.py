@@ -119,10 +119,46 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str, end_date: str, aff_id: 
 
 
 def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
-    """优先返回最近1小时内的缓存数据；否则查询并落库后返回。"""
+    """按日期动态缓存策略：
 
-    # 1. 先查 DB 缓存（最近 60 分钟）
-    cached = UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, within_minutes=60)
+    - 今天：最近 2 小时缓存命中则返回；否则实时查询并落库。
+    - 昨天：最近 4 小时缓存命中则返回；否则实时查询并落库。
+    - 前天及更早：优先返回该日期的最新缓存；若没有则实时查询并落库。
+    - 非单日查询：保持原先 2 小时缓存策略。
+    """
+
+    from datetime import datetime
+
+    fmt = "%Y-%m-%d"
+    within_minutes = 120  # 默认 2 小时
+    days_diff = None
+    try:
+        # 仅针对单日查询做差值判断
+        if start_date == end_date:
+            target_date = datetime.strptime(start_date, fmt).date()
+            today = datetime.now().date()
+            days_diff = (today - target_date).days
+    except Exception:
+        # 日期解析失败时，走默认缓存与实时查询逻辑
+        pass
+
+    # 前天及更早：优先返回该日期的缓存；若没有则在线查询并落库
+    if days_diff is not None and days_diff >= 2:
+        cached_prev = UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id)
+        if cached_prev:
+            return cached_prev
+        rows = fetch_by_pid(pid, app_id, start_date, end_date, aff_id)
+        for row in rows:
+            row['pid'] = pid
+        UserAppDataDAO.save_data_bulk(rows)
+        return rows
+
+    # 昨天：扩大缓存窗口到 4 小时
+    if days_diff == 1:
+        within_minutes = 240
+
+    # 1. 先查 DB 缓存（包含 aff_id 过滤）
+    cached = UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, aff_id, within_minutes)
     if cached:
         return cached
 
