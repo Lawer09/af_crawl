@@ -213,7 +213,8 @@ main() {
     # 执行命令（区分前台/后台）
     if [ $BACKGROUND -eq 1 ]; then
         # 后台运行：用nohup确保终端关闭后继续运行，输出重定向到日志
-        nohup sh -c "$command_str 2>&1 | while IFS= read -r line; do echo \"[\$(timestamp)] \$line\"; done >> \"$LOG_FILE\" 2>&1" &
+        # 注意：在子shell中无法访问当前shell定义的函数，这里改为直接使用 date 生成时间戳
+        nohup sh -c "$command_str 2>&1 | while IFS= read -r line; do printf '[%s] %s\n' \"\$(date '+%Y-%m-%d %H:%M:%S')\" \"\$line\"; done >> \"$LOG_FILE\" 2>&1" &
         local PID=$!  # 获取后台进程ID
         echo "[$(timestamp)] 程序已在后台启动，进程ID: $PID"
         echo "[$(timestamp)] 停止程序可执行: kill $PID"
