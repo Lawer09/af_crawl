@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from config.settings import CRAWLER
 import requests
 from model.cookie import cookie_model
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,33 @@ def request_with_retry(
 
     retry_set = retry_status or (_FAST_RETRY_STATUS | _NORMAL_RETRY_STATUS)
  
+    # -------------------- helpers for WAF token --------------------
+    def _extract_waf_token(resp: requests.Response) -> Optional[str]:
+        # 优先从响应 cookies 取
+        try:
+            if resp.cookies and resp.cookies.get("aws-waf-token"):
+                return resp.cookies.get("aws-waf-token")
+        except Exception:
+            pass
+        # 回退解析 Set-Cookie 中的 aws-waf-token
+        try:
+            sc = resp.headers.get("Set-Cookie") or ""
+            m = re.search(r"aws-waf-token=([^;\r\n]+)", sc)
+            if m:
+                return m.group(1).strip() or None
+        except Exception:
+            pass
+        return None
+
+    def _update_session_waf(sess: requests.Session, token: str, headers: Dict[str, str]) -> None:
+        try:
+            # 统一设置到会话 Cookie，确保域与路径匹配
+            sess.cookies.set("aws-waf-token", token, domain=".appsflyer.com", path="/")
+            # 覆盖下一次请求的 XSRF 头
+            headers["X-XSRF-TOKEN"] = token
+        except Exception as e:
+            logger.debug("update waf token failed: %s", e)
+
     for attempt in range(max_retry):
         # ------- 确保带上 X-Username -------
         base_headers = session.headers.copy()
@@ -84,6 +112,13 @@ def request_with_retry(
                 logger.debug("ip check failed: %s", _e)
 
         resp = session.request(method, url, **kwargs)
+        # 202（排队）时尝试刷新 aws-waf-token，无需登录
+        if resp.status_code == 202:
+            waf_new = _extract_waf_token(resp)
+            if waf_new:
+                _update_session_waf(session, waf_new, req_headers)
+                kwargs["headers"] = req_headers
+                logger.info("WAF token refreshed from 202 (len=%s)", len(waf_new))
         if resp.status_code not in retry_set:
             return resp  # 成功（或其它错误交由上层处理）
 
