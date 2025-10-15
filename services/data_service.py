@@ -177,14 +177,29 @@ def update_daily_data():
         # 仅选择 user_type_id 为 'pid' 的应用；兼容历史记录为空(None)时也视为 pid 账号下应用
         pid_apps = [a for a in apps if (a.get("user_type_id") == 'pid' or a.get("user_type_id") in (None, ''))]
 
+        pid_total_apps = 0
+        pid_success = 0
         for app in pid_apps:
             app_id = app["app_id"]
             total_apps += 1
+            pid_total_apps += 1
             try:
                 rows = try_get_and_save_data(pid, app_id, target_date, target_date)
-                total_success += 1 if rows else 0
+                if rows:
+                    total_success += 1
+                    pid_success += 1
             except Exception:
                 logger.exception(f"Daily update failed for pid={pid}, app_id={app_id}")
+
+        # 输出当前pid的处理统计
+        logger.info(
+            "Daily data update stats: target_date=%s pid=%s username=%s apps=%d success=%d",
+            target_date,
+            pid,
+            username,
+            pid_total_apps,
+            pid_success,
+        )
 
     logger.info("Daily data update finished: target_date=%s, apps=%d, success=%d", target_date, total_apps, total_success)
 

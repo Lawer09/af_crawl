@@ -63,6 +63,11 @@ class SessionManager:
                 cookies, expired_at, ua = self._login_by_playwright(username, password, browser_context_args, proxies)
                 break
             except Exception as e:
+                # 特殊处理 UA 非法字符错误：展示 UA 并直接终止登录尝试
+                if "Invalid characters found in userAgent" in str(e):
+                    bad_ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
+                    logger.error("Invalid User-Agent detected, abort login -> username=%s ua=%s", username, bad_ua)
+                    raise
                 logger.warning("login failed #%s -> %s", attempt + 1, e)
                 # 最后一轮仍失败则抛出，避免后续使用未初始化变量
                 if attempt == max_attempts - 1:

@@ -184,11 +184,10 @@ def update_daily_apps():
             for app in apps:
                 app["user_type_id"] = pid
             all_apps.extend(apps)
+            # 输出当前用户（带pid）获取的app数量
+            logger.info("Fetched apps count: pid=%s username=%s count=%d", pid, user.get("email"), len(apps))
+            UserAppDAO.save_apps(all_apps)
         except Exception as e:
             # 单用户异常不影响整批次，记录并跳过
             logger.exception("update_daily_apps user failed: pid=%s username=%s -> %s", pid, user.get("email"), e)
             continue
-
-    # 4) 批量保存，减少 DB 操作
-    UserAppDAO.save_apps(all_apps)
-
