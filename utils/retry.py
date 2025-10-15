@@ -7,6 +7,7 @@ import random
 import time
 from typing import Any, Dict, Optional
 from config.settings import CRAWLER
+import config.af_config as cfg
 import requests
 from model.cookie import cookie_model
 import re
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 # 需要重试的 HTTP 状态码
 _FAST_RETRY_STATUS = {202}
 _NORMAL_RETRY_STATUS = {429, 403}
+
+# WAF 播种节流状态：记录每个用户名最近一次播种时间戳
+_SEED_WAF_LAST_TS: dict[str, float] = {}
 
 
 def _backoff(base: int, attempt: int) -> int:
@@ -73,6 +77,38 @@ def request_with_retry(
         except Exception as e:
             logger.debug("update waf token failed: %s", e)
 
+    def _seed_waf_from_login(sess: requests.Session, headers: Dict[str, str], username: Optional[str]) -> Optional[str]:
+        """当 202 响应未带新 token 时，轻量 GET 登录页播种 aws-waf-token（无需账号密码）。"""
+        try:
+            # 节流：同一用户名在冷却期内不重复播种
+            if not CRAWLER.get("seed_waf_on_202", False):
+                return None
+            if not username:
+                return None
+            now = time.time()
+            cooldown = int(CRAWLER.get("seed_waf_cooldown_seconds", 180))
+            last_ts = _SEED_WAF_LAST_TS.get(username, 0)
+            if now - last_ts < cooldown:
+                logger.debug("skip waf seeding due to cooldown: username=%s remain=%.0fs", username, cooldown - (now - last_ts))
+                return None
+
+            # 发起 GET 登录页以获取最新 WAF cookie
+            r = sess.get(cfg.LOGIN_API, headers={
+                "User-Agent": sess.headers.get("User-Agent"),
+                "Referer": cfg.LOGIN_API,
+                "Origin": "https://hq1.appsflyer.com",
+                "Accept": "application/json, text/plain, */*",
+            }, timeout=10)
+            waf_new = _extract_waf_token(r)
+            if waf_new:
+                _update_session_waf(sess, waf_new, headers)
+                _SEED_WAF_LAST_TS[username] = now
+                logger.info("WAF token seeded from login (len=%s, cooldown=%ss)", len(waf_new), cooldown)
+                return waf_new
+        except Exception as e:
+            logger.debug("seed waf from login failed: %s", e)
+        return None
+
     for attempt in range(max_retry):
         # ------- 确保带上 X-Username -------
         base_headers = session.headers.copy()
@@ -119,6 +155,20 @@ def request_with_retry(
                 _update_session_waf(session, waf_new, req_headers)
                 kwargs["headers"] = req_headers
                 logger.info("WAF token refreshed from 202 (len=%s)", len(waf_new))
+            else:
+                # 增强版：响应未携带 token，按需播种登录页以获取最新 token
+                try:
+                    username = (
+                        req_headers.get("x-username")
+                        or req_headers.get("X-Username")
+                        or base_headers.get("x-username")
+                        or base_headers.get("X-Username")
+                    )
+                    waf_seed = _seed_waf_from_login(session, req_headers, username)
+                    if waf_seed:
+                        kwargs["headers"] = req_headers
+                except Exception as _e:
+                    logger.debug("waf seeding dispatch failed: %s", _e)
         if resp.status_code not in retry_set:
             return resp  # 成功（或其它错误交由上层处理）
 
