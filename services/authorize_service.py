@@ -60,6 +60,7 @@ def is_prt_valid(pid:str, prt:str)->bool:
     resp.raise_for_status()
     try:
         data = resp.json()
+        logger.info(f"{prt} is valid: {data}")
     except ValueError as e:
         # 非 JSON 或空响应时，记录细节并返回空列表，避免调度失败
         ct = resp.headers.get("Content-Type")
