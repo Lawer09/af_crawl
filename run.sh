@@ -213,6 +213,28 @@ main() {
     
     # 执行命令（区分前台/后台）
     if [ $BACKGROUND -eq 1 ]; then
+        # 若存在历史后台进程，先行关闭
+        if [ -f "$PID_FILE" ]; then
+            OLD_PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" >/dev/null 2>&1; then
+                echo "[$(timestamp)] 检测到已有后台进程(PID=$OLD_PID)，先关闭..."
+                kill "$OLD_PID" >/dev/null 2>&1 || true
+                # 等待最多10秒，若仍存活则强制关闭
+                for i in $(seq 1 10); do
+                    if kill -0 "$OLD_PID" >/dev/null 2>&1; then
+                        sleep 1
+                    else
+                        break
+                    fi
+                done
+                if kill -0 "$OLD_PID" >/dev/null 2>&1; then
+                    echo "[$(timestamp)] 旧进程仍在，强制关闭..."
+                    kill -9 "$OLD_PID" >/dev/null 2>&1 || true
+                fi
+                echo "[$(timestamp)] 已关闭旧进程: $OLD_PID"
+            fi
+            rm -f "$PID_FILE"
+        fi
         # 后台运行：用nohup确保终端关闭后继续运行，输出重定向到日志
         # 在子shell中直接使用 date 生成时间戳，并同时打印子shellPID，便于后续定位与关闭
         nohup sh -c "PID_TAG=\$$; $command_str 2>&1 | while IFS= read -r line; do printf '[%s][%s] %s\n' \"\$(date '+%Y-%m-%d %H:%M:%S')\" \"$PID_TAG\" \"\$line\"; done >> \"$LOG_FILE\" 2>&1" &
