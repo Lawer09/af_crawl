@@ -16,7 +16,7 @@ from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
 from services.data_service import fetch_user_app_data, fetch_by_pid_and_offer_id,fetch_with_overall_report_counts
 from services.app_service import fetch_app_by_pid
-from services.authorize import prt_auth
+from services.authorize_service import prt_auth
 
 
 logger = logging.getLogger(__name__)
@@ -85,10 +85,7 @@ def set_pid_auth_prt(
     try:
         # 调用数据服务添加认证
         success = prt_auth(pid, prt)
-        if not success:
-            raise HTTPException(status_code=400, detail="PRT认证失败")
-        
-        return {"status": "success", "message": "PRT认证成功"}
+        return {"status": "success" if success == "true" else "fail", "message": success}
     except Exception as e:
         logger.exception(f"Error fetching user app data: {e}")
         raise HTTPException(status_code=500, detail=str(e))

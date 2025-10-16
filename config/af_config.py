@@ -46,4 +46,5 @@ NEW_TABLE_API_PARAM = {
 
 
 # AF PRT 认证
-AF_PRT_AUTH_LIST_API = "https://hq1.appsflyer.com/security-center/agency-allow-lists"
+AF_PRT_AUTH_API = "https://hq1.appsflyer.com/security-center/agency-allow-lists"
+AF_PRT_PRT_VALID_API = "https://hq1.appsflyer.com/security-center/is-valid-agency?agency="
