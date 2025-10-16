@@ -93,24 +93,6 @@ def set_pid_auth_prt(
         logger.exception(f"Error fetching user app data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# 获取用户数据
-@router.post("/user/app/data")
-def get_user_app_data(task: dict):
-    """获取用户app数据"""
-    try:
-        # 调用数据服务获取数据
-        rows = fetch_user_app_data(
-            username=task["username"],
-            password=task["password"],
-            app_id=task["app_id"],
-            start_date=task["start_date"],
-            end_date=task["end_date"]
-        )
-        return {"status": "success", "rows": rows}
-        
-    except Exception as e:
-        logger.exception(f"Error fetching user app data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # 通过 pid 查询用户账号并获取数据（GET）
 @router.get("/user/app/data")
