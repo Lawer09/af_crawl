@@ -1,5 +1,5 @@
 # af 相关的验证
-from login_service import get_session_by_pid
+from services.login_service import get_session_by_pid
 import config.af_config as cfg
 from utils.retry import request_with_retry
 import logging
