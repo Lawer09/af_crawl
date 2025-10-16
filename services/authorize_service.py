@@ -74,7 +74,7 @@ def is_prt_valid(pid:str, prt:str)->bool:
         )
         return False
 
-    return data == "true"
+    return data
 
 
 def add_user_prt(pid:str, prt_list:list[str])->str:
@@ -125,7 +125,7 @@ def prt_auth(pid:str, prt:str) -> str:
 
     # 该pid已经添加了prt，无需重复添加
     if prt in prt_list:
-        return True
+        return "true"
     
     prt_list.append(prt)
     # 添加 prt
