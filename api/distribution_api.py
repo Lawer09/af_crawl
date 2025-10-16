@@ -14,10 +14,9 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
-from services.data_service import fetch_user_app_data, fetch_by_pid_and_offer_id,fetch_with_overall_report_counts
+from services.data_service import fetch_by_pid_and_offer_id,fetch_with_overall_report_counts
 from services.app_service import fetch_app_by_pid
 from services.authorize_service import prt_auth
-
 
 logger = logging.getLogger(__name__)
 

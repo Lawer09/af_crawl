@@ -1,5 +1,4 @@
 # af 相关的验证
-from ast import List
 from services.login_service import get_session_by_pid
 import config.af_config as cfg
 from utils.retry import request_with_retry
@@ -8,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_user_prt_list(pid:str) ->List[str]:
+def get_user_prt_list(pid:str) ->list[str]:
     """获取 pid 已授权的 prt 列表"""
 
     sess = get_session_by_pid(pid)
@@ -78,7 +77,7 @@ def is_prt_valid(pid:str, prt:str)->bool:
     return data == "true"
 
 
-def add_user_prt(pid:str, prt_list:List[str])->str:
+def add_user_prt(pid:str, prt_list:list[str])->str:
     """添加 prt 到 pid 授权列表"""
     sess = get_session_by_pid(pid)
     headers = {
