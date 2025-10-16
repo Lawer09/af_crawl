@@ -83,10 +83,10 @@ def set_pid_auth_prt(
     """添加pid的prt认证"""
     try:
         # 调用数据服务添加认证
-        success = prt_auth(pid, prt)
-        return {"status": "success" if success == "true" else "fail", "message": success}
+        prt_auth(pid, prt)
+        return {"status": "success", "message": "ok"}
     except Exception as e:
-        logger.exception(f"Error fetching user app data: {e}")
+        logger.error(f"Error adding prt auth for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -78,7 +78,7 @@ def is_prt_valid(pid:str, prt:str)->bool:
     return data
 
 
-def add_user_prt(pid:str, prt_list:list[str])->str:
+def add_user_prt(pid:str, prt_list:list[str]):
     """添加 prt 到 pid 授权列表"""
     sess = get_session_by_pid(pid)
     headers = {
@@ -91,7 +91,7 @@ def add_user_prt(pid:str, prt_list:list[str])->str:
         resp = request_with_retry(sess, "POST", cfg.AF_PRT_AUTH_API, json=prt_list, headers=headers, timeout=30)
     except Exception as e:
         logger.warning("add_user_prt request failed for %s -> %s; skip", pid, e)
-        return "add fail"
+        raise Exception(f"failed for {pid} -> {e}")
 
     resp.raise_for_status()
     try:
@@ -108,26 +108,33 @@ def add_user_prt(pid:str, prt_list:list[str])->str:
             ct,
             (resp.text or "")[:200],
         )
-        return "add fail"
-    return data
+        raise Exception("add fail")
+
+    if not data:
+        raise Exception("add fail")
 
 
-def prt_auth(pid:str, prt:str) -> str:
+def prt_auth(pid:str, prt:str):
     """ pid 增加 prt 用于 Authorized agencies """
     
+    # 检查 prt 是否为空
+    if not prt:
+        raise Exception("prt is empty")
+
     # 检查 prt 是否有效
     if not is_prt_valid(pid, prt):
-        return f"prt {prt} is invalid"
+        raise Exception(f"prt {prt} is invalid")
 
     # 获取 pid 已授权的 prt 列表
     prt_list = get_user_prt_list(pid)
     if not prt_list:
-        return f"failed to get prt list for pid {pid}"
+        raise Exception(f"failed to get prt list for pid {pid}")
 
     # 该pid已经添加了prt，无需重复添加
     if prt in prt_list:
-        return "true"
+        logger.info(f"prt {prt} already in list for pid {pid}")
+        return
     
     prt_list.append(prt)
     # 添加 prt
-    return add_user_prt(pid, prt_list)
+    add_user_prt(pid, prt_list)
