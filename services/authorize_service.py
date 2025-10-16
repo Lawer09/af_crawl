@@ -113,6 +113,7 @@ def add_user_prt(pid:str, prt_list:list[str]):
     if not data:
         raise Exception("add fail")
 
+    return prt_list
 
 def prt_auth(pid:str, prt:str):
     """ pid 增加 prt 用于 Authorized agencies """
@@ -137,4 +138,4 @@ def prt_auth(pid:str, prt:str):
     
     prt_list.append(prt)
     # 添加 prt
-    add_user_prt(pid, prt_list)
+    return add_user_prt(pid, prt_list)

@@ -83,8 +83,8 @@ def set_pid_auth_prt(
     """添加pid的prt认证"""
     try:
         # 调用数据服务添加认证
-        prt_auth(pid, prt)
-        return {"status": "success", "message": "ok"}
+        prt_list = prt_auth(pid, prt)
+        return {"status": "success", "data": prt_list}
     except Exception as e:
         logger.error(f"Error adding prt auth for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -111,7 +111,7 @@ def get_user_app_data_by_pid(
             end_date=end_date,
         )
         
-        return {"status": "success", "rows": rows}
+        return {"status": "success", "data": rows}
 
     except HTTPException:
         raise
@@ -138,7 +138,7 @@ def get_user_app_data_gap_by_pid(
             date=date,
         )
         
-        return {"status": "success", "rows": rows}
+        return {"status": "success", "data": rows}
 
     except HTTPException:
         raise
@@ -154,7 +154,7 @@ def get_user_app_by_pid(
     """通过 pid 获取用户 app 列表"""
     try:
         apps = fetch_app_by_pid(pid)
-        return {"status": "success", "apps": apps}
+        return {"status": "success", "data": apps}
     except Exception as e:
         logger.exception(f"Error fetching user app data by pid: {e}")
         raise HTTPException(status_code=500, detail=str(e))
