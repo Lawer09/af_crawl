@@ -16,6 +16,8 @@ from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
 from services.data_service import fetch_user_app_data, fetch_by_pid_and_offer_id,fetch_with_overall_report_counts
 from services.app_service import fetch_app_by_pid
+from services.authorize import prt_auth
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,24 @@ class TaskStatusUpdate(BaseModel):
     error_message: Optional[str] = None
     result_data: Optional[Dict] = None
 
+
+# pid的prt认证添加
+@router.get("/user/auth/prt")
+def set_pid_auth_prt(
+    pid: str = Query(..., description="用户PID"),
+    prt: str = Query(..., description="用户PRT（用于认证）"),
+):
+    """添加pid的prt认证"""
+    try:
+        # 调用数据服务添加认证
+        success = prt_auth(pid, prt)
+        if not success:
+            raise HTTPException(status_code=400, detail="PRT认证失败")
+        
+        return {"status": "success", "message": "PRT认证成功"}
+    except Exception as e:
+        logger.exception(f"Error fetching user app data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 获取用户数据
 @router.post("/user/app/data")

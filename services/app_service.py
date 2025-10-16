@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict
 
-from services.login_service import get_session
+from services.login_service import get_session, get_session_by_pid
 from model.user_app import UserAppDAO
 from model.user import UserDAO, UserProxyDAO
 
@@ -11,7 +11,6 @@ import config.af_config as cfg
 from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
-
 
 def fetch_apps(
     user: Dict[str, str],
@@ -35,22 +34,8 @@ def fetch_apps(
         "Referer": "https://hq1.appsflyer.com/apps/myapps",
         "Origin": "https://hq1.appsflyer.com",
         "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8",
     }
-    # 更贴近前端请求形态的头部
-    headers.setdefault("Accept-Language", "en-US,en;q=0.9")
-    headers.setdefault("X-Requested-With", "XMLHttpRequest")
-
-    # 注入 XSRF Token（来自 aws-waf-token），安全读取避免重复同名 Cookie 引发错误
-    waf_token = None
-    try:
-        for _c in session.cookies:
-            if getattr(_c, "name", None) == "aws-waf-token":
-                waf_token = getattr(_c, "value", None)
-                break
-    except Exception as _e:
-        logger.debug("read waf token failed: %s", _e)
-    if waf_token:
-        headers["X-XSRF-TOKEN"] = waf_token
 
     try:
         resp = request_with_retry(session, "GET", url, headers=headers, timeout=30)
@@ -137,6 +122,77 @@ def fetch_app_by_pid(pid: str) -> List[Dict]:
     for app in apps:
         app["user_type_id"] = pid
     UserAppDAO.save_apps(apps)
+    return apps
+
+
+def fetch_pid_apps(pid: str) -> List[Dict]:
+    """基于 pid 获取 app 列表，使用按 pid 获取的会话，简化代理与UA流程。"""
+    user = UserDAO.get_user_by_pid(pid)
+    if not user:
+        logger.error(f"User with pid={pid} not found.")
+        return []
+
+    account_type = user.get("account_type")
+
+    try:
+        session = get_session_by_pid(pid)
+    except Exception as e:
+        logger.error("Failed to init session for pid=%s: %s", pid, e)
+        return []
+
+    if account_type == "pid":
+        url = cfg.HOME_APP_URL_PID
+    else:
+        url = cfg.HOME_APP_URL_PRT
+
+    headers = {
+        "Referer": "https://hq1.appsflyer.com/apps/myapps",
+        "Origin": "https://hq1.appsflyer.com",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+
+    try:
+        resp = request_with_retry(session, "GET", url, headers=headers, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("fetch_pid_apps request failed for pid=%s -> %s; skip", pid, e)
+        return []
+
+    apps: List[Dict] = []
+
+    username = user["email"]
+    if account_type == "pid":
+        if "data" not in data:
+            logger.error("unexpected response: %s", data)
+            return []
+        for app in data["data"]:
+            apps.append({
+                "username": username,
+                "app_id": app["app_id"],
+                "app_name": app.get("app_name"),
+                "platform": app["platform"],
+                "timezone": None,
+                "user_type_id": None,
+            })
+    else:
+        if "apps" not in data or "user" not in data:
+            logger.error("unexpected response: %s", data)
+            return []
+        prt_id = data["user"].get("agencyId")
+        for app in data["apps"]:
+            if app.get("deleted"):
+                continue
+            apps.append({
+                "username": username,
+                "app_id": app["id"],
+                "app_name": app["name"],
+                "platform": app["platform"],
+                "timezone": app["localization"].get("timezone"),
+                "user_type_id": prt_id,
+            })
+
     return apps
 
 
