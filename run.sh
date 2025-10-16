@@ -235,9 +235,9 @@ main() {
             fi
             rm -f "$PID_FILE"
         fi
-        # 后台运行：用nohup确保终端关闭后继续运行，输出重定向到日志
-        # 在子shell中直接使用 date 生成时间戳，并同时打印子shellPID，便于后续定位与关闭
-        nohup sh -c "PID_TAG=\$$; $command_str 2>&1 | while IFS= read -r line; do printf '[%s][%s] %s\n' \"\$(date '+%Y-%m-%d %H:%M:%S')\" \"$PID_TAG\" \"\$line\"; done >> \"$LOG_FILE\" 2>&1" &
+        # 后台运行：用 nohup 直接启动 Python 进程，并记录其 PID（避免只记录包装 shell 的 PID）
+        # 使用 exec 将 bash -c 替换为实际的 python 进程，确保 $! 即为 Python 进程 PID
+        nohup bash -c "exec $command_str" >> "$LOG_FILE" 2>&1 &
         local PID=$!  # 获取后台进程ID
         echo "$PID" > "$PID_FILE"
         echo "[$(timestamp)] 程序已在后台启动，进程ID: $PID"

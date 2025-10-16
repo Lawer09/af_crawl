@@ -55,7 +55,7 @@ def is_prt_valid(pid:str, prt:str)->bool:
         resp = request_with_retry(sess, "GET", cfg.AF_PRT_PRT_VALID_API + prt, headers=headers, timeout=15)
     except Exception as e:
         logger.warning("is_prt_valid request failed for %s -> %s; skip", pid, e)
-        return False
+        raise Exception(f"prt valid failed for {pid} -> {e}")
 
     resp.raise_for_status()
     try:
@@ -73,7 +73,7 @@ def is_prt_valid(pid:str, prt:str)->bool:
             ct,
             (resp.text or "")[:200],
         )
-        return False
+        raise Exception(e)
 
     return data
 
@@ -134,7 +134,7 @@ def prt_auth(pid:str, prt:str):
     # 该pid已经添加了prt，无需重复添加
     if prt in prt_list:
         logger.info(f"prt {prt} already in list for pid {pid}")
-        return
+        return prt_list
     
     prt_list.append(prt)
     # 添加 prt
