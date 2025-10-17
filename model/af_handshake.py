@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Optional
 
-from core.db import report_mysql_pool
+from core.db import mysql_pool
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class AfHandshakeDAO:
     @classmethod
     def get_prts_by_user(cls, af_user_id: int) -> List[str]:
         sql = f"SELECT prt FROM {cls.TABLE} WHERE af_user_id = %s"
-        rows = report_mysql_pool.select(sql, (af_user_id,))
+        rows = mysql_pool.select(sql, (af_user_id,))
         return [r["prt"] for r in rows] if rows else []
 
     @classmethod
@@ -45,10 +45,10 @@ class AfHandshakeDAO:
             sql = (
                 f"DELETE FROM {cls.TABLE} WHERE af_user_id = %s AND prt IN ({placeholders})"
             )
-            deleted = report_mysql_pool.execute(sql, (af_user_id, *to_delete))
+            deleted = mysql_pool.execute(sql, (af_user_id, *to_delete))
 
         # 先尝试更新（若已存在则更新状态为成功）
-        updated = report_mysql_pool.execute(
+        updated = mysql_pool.execute(
             f"UPDATE {cls.TABLE} SET status = %s WHERE af_user_id = %s AND prt = %s",
             (status, af_user_id, prt),
         )
@@ -56,7 +56,7 @@ class AfHandshakeDAO:
         added = 0
         if updated == 0:
             # 不存在则插入
-            added = report_mysql_pool.execute(
+            added = mysql_pool.execute(
                 f"INSERT INTO {cls.TABLE} (af_user_id, prt, status) VALUES (%s, %s, %s)",
                 (af_user_id, prt, status),
             )
@@ -69,13 +69,13 @@ class AfHandshakeDAO:
 
         返回统计：{"added": n1, "updated": n2}
         """
-        updated = report_mysql_pool.execute(
+        updated = mysql_pool.execute(
             f"UPDATE {cls.TABLE} SET status = %s WHERE af_user_id = %s AND prt = %s",
             (status, af_user_id, prt),
         )
         added = 0
         if updated == 0:
-            added = report_mysql_pool.execute(
+            added = mysql_pool.execute(
                 f"INSERT INTO {cls.TABLE} (af_user_id, prt, status) VALUES (%s, %s, %s)",
                 (af_user_id, prt, status),
             )
@@ -99,17 +99,17 @@ class AfHandshakeDAO:
         if to_delete:
             placeholders = ",".join(["%s"] * len(to_delete))
             sql = f"DELETE FROM {cls.TABLE} WHERE af_user_id = %s AND prt IN ({placeholders})"
-            deleted = report_mysql_pool.execute(sql, (af_user_id, *to_delete))
+            deleted = mysql_pool.execute(sql, (af_user_id, *to_delete))
 
         updated = 0
         if to_update:
             placeholders = ",".join(["%s"] * len(to_update))
             sql = f"UPDATE {cls.TABLE} SET status = %s WHERE af_user_id = %s AND prt IN ({placeholders})"
-            updated = report_mysql_pool.execute(sql, (status, af_user_id, *to_update))
+            updated = mysql_pool.execute(sql, (status, af_user_id, *to_update))
 
         added = 0
         for p in to_add:
-            added += report_mysql_pool.execute(
+            added += mysql_pool.execute(
                 f"INSERT INTO {cls.TABLE} (af_user_id, prt, status) VALUES (%s, %s, %s)",
                 (af_user_id, p, status),
             )
