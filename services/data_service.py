@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import config.af_config as cfg
 from services.login_service import get_session, get_session_by_pid
 from model.user_app_data import UserAppDataDAO
+from model.af_data import AfAppDataDAO
 from model.overall_report_count import OverallReportCountDAO
 from model.offer import OfferDAO
 from model.aff import AffDAO
@@ -131,9 +132,14 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
         if cached_prev:
             return cached_prev
         rows = fetch_by_pid(pid, app_id, start_date, end_date, aff_id)
+        af_rows = []
         for row in rows:
             row['pid'] = pid
+            if int(row['days']) == 1:
+                af_rows.append(row)
         UserAppDataDAO.save_data_bulk(rows)
+        # 只插入af数据中开始日期和结束日期相同的数据
+        AfAppDataDAO.upsert_bulk(af_rows)
         return rows
 
     # 昨天：扩大缓存窗口到 4 小时
@@ -147,11 +153,18 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
 
     # 2. 无缓存则实时查询
     rows = fetch_by_pid(pid, app_id, start_date, end_date, aff_id)
+
+    af_rows = []
     for row in rows:
         row['pid'] = pid
+        if int(row['days']) == 1:
+            af_rows.append(row)
 
     # 3. 落库
     UserAppDataDAO.save_data_bulk(rows)
+    # 只插入af数据中开始日期和结束日期相同的数据
+    
+    AfAppDataDAO.upsert_bulk(af_rows)
     return rows
 
 
