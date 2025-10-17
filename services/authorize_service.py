@@ -1,5 +1,7 @@
 # af 相关的验证
 from services.login_service import get_session_by_pid
+from model.user import UserDAO
+from model.af_handshake import AfHandshakeDAO
 import config.af_config as cfg
 from utils.retry import request_with_retry
 import logging
@@ -122,6 +124,11 @@ def prt_auth(pid:str, prt:str):
     if not prt:
         raise Exception("prt is empty")
 
+    # 先从数据库握手表查该 pid 关联的所有 prt 做比较
+    user_id = UserDAO.get_user_id_by_pid(pid)
+    if not user_id:
+        raise Exception(f"No af_user.id found for pid {pid}")
+
     # 检查 prt 是否有效
     if not is_prt_valid(pid, prt):
         raise Exception(f"prt {prt} is invalid")
@@ -131,11 +138,21 @@ def prt_auth(pid:str, prt:str):
     if not prt_list:
         raise Exception(f"failed to get prt list for pid {pid}")
 
-    # 该pid已经添加了prt，无需重复添加
+    # 若远端已包含该 prt，则无需重复添加，但同步握手关系
     if prt in prt_list:
         logger.info(f"prt {prt} already in list for pid {pid}")
+        try:
+            # 同步整表到远端列表
+            AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
+        except Exception as e:
+            logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
         return prt_list
     
     prt_list.append(prt)
     # 添加 prt
-    return add_user_prt(pid, prt_list)
+    result = add_user_prt(pid, prt_list)
+    try:
+        AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
+    except Exception as e:
+        logger.warning("Handshake sync failed: pid=%s prt=%s -> %s", pid, prt, e)
+    return result

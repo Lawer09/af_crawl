@@ -36,7 +36,7 @@ class UserDAO:
         """根据 pid 查询用户（当 pid='pid'）"""
         try:
             rows = mysql_pool.select(
-                f"SELECT email, password, account_type FROM {cls.TABLE} WHERE pid = %s",
+                f"SELECT id, email, password, account_type FROM {cls.TABLE} WHERE pid = %s",
                 (pid,)
             )
             if rows:
@@ -44,6 +44,21 @@ class UserDAO:
             return None
         except Exception as e:
             logger.error(f"Error fetching user by pid: {e}")
+            return None
+
+    @classmethod
+    def get_user_id_by_pid(cls, pid: str) -> Optional[int]:
+        """仅返回用户 id（便于外部关系映射）"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT id FROM {cls.TABLE} WHERE pid = %s LIMIT 1",
+                (pid,)
+            )
+            if rows:
+                return int(rows[0]["id"])  # type: ignore
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user id by pid: {e}")
             return None
 
     @classmethod

@@ -252,7 +252,7 @@ def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: s
         af_clicks = int(row.get("af_clicks", 0) or 0)
 
         # 计算 gap 百分比（保留两位小数）
-        gap = round((af_clicks / clicks * 100.0), 2) if clicks > 0 else 0.0
+        gap = round(( (clicks - af_clicks) / clicks), 4) if clicks > 0 else 0.0
 
         enriched.append({
             **row,

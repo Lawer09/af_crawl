@@ -7,7 +7,7 @@ import requests
 from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext
 import time
 from model.cookie import cookie_model
-from config.settings import PLAYWRIGHT
+from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES
 
 logger = logging.getLogger(__name__)
 
@@ -369,7 +369,7 @@ class SessionManager:
                     "httpOnly": True,
                     "secure": True,
                 })
-        expired_at = datetime.now() + timedelta(minutes=15)
+        expired_at = datetime.now() + timedelta(minutes=SESSION_EXPIRE_MINUTES)
         logger.info("login success(api) -> %s", username)
         return final_cookies, expired_at, ua
 

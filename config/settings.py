@@ -56,6 +56,10 @@ PLAYWRIGHT = {
     'timeout': int(os.getenv('PW_TIMEOUT', '180000')),  # 增加到3分钟
 }
 
+# 登录后的会话（Cookie）有效时间，单位：分钟
+# 默认为 15 分钟，可在 .env 中通过 SESSION_EXPIRE_MINUTES 覆盖
+SESSION_EXPIRE_MINUTES = int(os.getenv('SESSION_EXPIRE_MINUTES', '15'))
+
 _proc_default = int(os.getenv('CRAWLER_PROCESSES', '1'))
 _thread_default = int(os.getenv('CRAWLER_THREADS', '1'))
 
