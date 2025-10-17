@@ -47,10 +47,15 @@ class OfferDAO:
 
     @classmethod
     def get_list_by_pids_group_pid(cls, pids: List[str]) -> Dict[str, List[Dict]]:
-        """批量查询并按 pid 分组返回：{pid: [rows]}"""
-        rows = cls.get_list_by_pids(pids)
+        """批量查询并按 pid 分组返回：{pid: [rows]}（支持大列表分批查询）"""
         grouped: Dict[str, List[Dict]] = {}
-        for r in rows:
-            key = str(r.get("pid")) if r.get("pid") is not None else ""
-            grouped.setdefault(key, []).append(r)
+        if not pids:
+            return grouped
+        CHUNK = 500
+        for i in range(0, len(pids), CHUNK):
+            chunk = pids[i:i+CHUNK]
+            rows = cls.get_list_by_pids(chunk)
+            for r in rows:
+                key = str(r.get("pid")) if r.get("pid") is not None else ""
+                grouped.setdefault(key, []).append(r)
         return grouped
