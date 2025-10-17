@@ -29,8 +29,8 @@ class AffDAO:
 
         placeholders = ",".join(["%s"] * len(offer_ids))
         sql = (
-            f"SELECT id, campaign AS offer_id, customer AS aff_id, live "
-            f"FROM {cls.TABLE} WHERE live = 1 AND campaign IN ({placeholders})"
+            f"SELECT id, campaign AS offer_id, customer AS aff_id "
+            f"FROM {cls.TABLE} WHERE live = 1 AND need_proxy=1 AND campaign IN ({placeholders})"
         )
         try:
             return mysql_pool.select(sql, tuple(offer_ids))
@@ -61,5 +61,4 @@ class AffDAO:
 
     @classmethod
     def get_list_by_offer_ids_group(cls, offer_ids: List[int]) -> Dict[int, List[Dict]]:
-        """别名：按 offer_id 分组（与调用处保持兼容）"""
         return cls.get_list_by_offer_ids_group_offer_id(offer_ids)
