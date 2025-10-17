@@ -143,7 +143,8 @@ def prt_auth(pid:str, prt:str):
         logger.info(f"prt {prt} already in list for pid {pid}")
         try:
             # 同步整表到远端列表
-            AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
+            ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
+            logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
         except Exception as e:
             logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
         return prt_list
