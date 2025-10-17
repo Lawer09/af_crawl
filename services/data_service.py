@@ -247,23 +247,17 @@ def update_daily_data():
         if not offers:
             logger.info(f"Daily update for pid={pid} with no offers.")
             continue
-
+        
         pid_total_apps = 0
         pid_success = 0
-        for offer in offers:
-            offer_id = offer["id"]
-            app_id = offer["app_id"]
-            total_apps += 1
-            pid_total_apps += 1
-            affs = offer_id_aff_map.get(int(offer_id), [])
 
-            for aff in affs:
-                aff_id = aff.get("aff_id")
-                if not aff_id:
-                    logger.info(f"Daily update for pid={pid}, app_id={app_id}, offer_id={offer_id} with no aff_id.")
-                    continue
+        app_aff_map = get_app_aff_map_from_offers(offers)
+
+        for app_id, aff_ids in app_aff_map.items():
+            for aff_id in aff_ids:
+                logger.info("Daily update pid=%s app_id=%s aff_ids=%s", pid, app_id, aff_ids)
                 try:
-                    logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, offer_id={offer_id}, aff_id={aff_id}")
+                    logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, aff_id={aff_id}")
                     rows = try_get_and_save_data(pid, app_id, target_date, target_date, aff_id=aff_id)
                     if rows:
                         total_success += 1
@@ -271,7 +265,7 @@ def update_daily_data():
                     logger.info(f"End Daily update success for pid={pid}, count={len(rows)}")
                 except Exception:
                     logger.exception(f"Daily update failed for pid={pid}, app_id={app_id}")
-
+      
         # 输出当前pid的处理统计
         logger.info(
             "Daily data update stats: target_date=%s pid=%s apps=%d success=%d",
@@ -416,5 +410,54 @@ def sync_user_app_data_to_af_data(pid: str, app_id: str, start_date: str, end_da
     except Exception as e:
         logger.exception("sync_user_app_data_to_af_data: upsert failed pid=%s app_id=%s range=%s..%s err=%s", pid, app_id, start_date, end_date, e)
         return 0
+
+
+
+def get_app_aff_map_from_offers(offers: List[Dict]) -> Dict[str, List[str]]:
+    """
+    传入 offer 列表，返回 app_id 下对应的所有 aff_id（1对多）。
+    - 输入 offers 每项示例：{"id": <offer_id>, "app_id": <app_id>, ...}
+    - 输出字典：{app_id(str): [aff_id(str), ...]}，去重并按字符串排序。
+    """
+    if not offers:
+        return {}
+
+    # 先按 app_id 聚合该 app 下的 offer_id 集合
+    app_offer_ids: Dict[str, set] = {}
+    for off in offers:
+        app_id = off.get("app_id")
+        offer_id = off.get("id")
+        if not app_id or offer_id is None:
+            continue
+        try:
+            app_offer_ids.setdefault(str(app_id), set()).add(int(offer_id))
+        except Exception:
+            # 非法的 offer_id 跳过
+            continue
+
+    if not app_offer_ids:
+        return {}
+
+    # 一次性查询所有 offer_id 对应的 aff 列表
+    all_offer_ids = [oid for oids in app_offer_ids.values() for oid in oids]
+    try:
+        offer_id_aff_map = AffDAO.get_list_by_offer_ids_group(all_offer_ids)
+    except Exception as e:
+        logger.exception("get_app_aff_map_from_offers: query aff by offers failed: %s", e)
+        offer_id_aff_map = {}
+
+    # 构建 {app_id: [aff_id,...]} 映射（字符串、去重、排序）
+    result: Dict[str, List[str]] = {}
+    for app_id, offer_ids in app_offer_ids.items():
+        aff_ids_set: set = set()
+        for oid in offer_ids:
+            affs = offer_id_aff_map.get(int(oid), []) if isinstance(offer_id_aff_map, dict) else []
+            for aff in affs:
+                aff_id = aff.get("aff_id")
+                if aff_id:
+                    aff_ids_set.add(str(aff_id))
+        result[app_id] = sorted(aff_ids_set) if aff_ids_set else []
+
+    return result
 
 

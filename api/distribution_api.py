@@ -95,7 +95,7 @@ def set_pid_auth_prt(
 def get_user_app_data_by_pid(
     pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
     app_id: str = Query(..., description="应用ID"),
-    aff_id: Optional[str] = Query(None, description="aff ID（可选）"),
+    aff_id: str = Query(..., description="aff ID"),
     offer_id: Optional[str] = Query(None, description="offer ID（可选）"),
     date: str = Query(..., description="日期，YYYY-MM-DD"),
 ):
