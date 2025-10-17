@@ -244,7 +244,6 @@ def update_daily_data():
     total_apps = 0
     total_success = 0
     for pid in pids:
-        time.sleep(random.uniform(4.5, 8.5))
         # 获取该用户的应用列表
         offers = pid_offer_map.get(pid)
         if not offers:
@@ -258,6 +257,7 @@ def update_daily_data():
 
         for app_id, aff_ids in app_aff_map.items():
             for aff_id in aff_ids:
+                time.sleep(random.uniform(3.5, 6.5))
                 logger.info("Daily update pid=%s app_id=%s aff_ids=%s", pid, app_id, aff_ids)
                 try:
                     logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, aff_id={aff_id}")
