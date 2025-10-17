@@ -225,7 +225,6 @@ def update_daily_data():
     total_success = 0
     for pid in pids:
         # 获取该用户的应用列表
-        logger.info(f"Daily update for pid={pid}")
         offers = pid_offer_map.get(pid)
         if not offers:
             logger.info(f"Daily update for pid={pid} with no offers.")
@@ -238,7 +237,8 @@ def update_daily_data():
             app_id = offer["app_id"]
             total_apps += 1
             pid_total_apps += 1
-            affs = offer_id_aff_map.get(str(offer_id), [])
+            affs = offer_id_aff_map.get(int(offer_id), [])
+
             for aff in affs:
                 aff_id = aff.get("aff_id")
                 if not aff_id:
