@@ -1,12 +1,13 @@
 from typing import List, Dict
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import config.af_config as cfg
 from services.login_service import get_session, get_session_by_pid
 from model.user_app_data import UserAppDataDAO
 from model.overall_report_count import OverallReportCountDAO
-from model.user_app import UserAppDAO
-from model.user import UserDAO, UserProxyDAO
+from model.offer import OfferDAO
+from model.aff import AffDAO
+from model.user import UserProxyDAO
 from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
@@ -24,61 +25,6 @@ def parse_app_data(data:List[Dict]) -> List[Dict]:
             "af_installs": adset.get("attributionSourceAppsflyerFiltersGranularityMetricIdInstallsUaPeriod", 0),
         })
     
-    return rows
-
-def fetch_user_app_data(username: str, password:str, app_id: str, start_date: str, end_date: str, aff_id:str | None = None, proxies: dict | None = None, browser_context_args: dict = {}):
-    """ 获取某个用户下的某个app的指定日期的数据 """
-
-    session = get_session(username, password, proxies=proxies, browser_context_args=browser_context_args)   
-
-    headers = {
-        "Referer": cfg.NEW_TABLE_API_REFERER,
-        "Origin": "https://hq1.appsflyer.com",
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json;charset=UTF-8",
-    }
-
-    payload = cfg.NEW_TABLE_API_PARAM.copy()
-    payload["dates"] = {"start": start_date, "end": end_date}
-    payload["filters"]["app-id"] = [app_id] # 指定app包
-    if aff_id:
-        payload["filters"]["adgroup-id"] = [aff_id]  # 将 ad_id 作为渠道id
-
-    # 保留 cfg 里的 groupings 结构（对象形式），仅在需要时可动态修改
-    resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
-    resp.raise_for_status()
-    try:
-        data : dict = resp.json()
-    except ValueError as e:
-        # 非 JSON 或空响应时，记录细节并返回空数据，避免任务失败
-        ct = resp.headers.get("Content-Type")
-        logger.error(
-            "Failed to parse JSON response for %s app_id=%s from %s: %s. status=%s, content-type=%s, body=%s",
-            username,
-            app_id,
-            cfg.NEW_TABLE_API,
-            e,
-            resp.status_code,
-            ct,
-            (resp.text or "")[:500],
-        )
-        return []
-
-    rows = parse_app_data(data.get("data", [])) or []
-    # 计算天数
-    
-    fmt = "%Y-%m-%d"
-    days_cnt = (
-        (datetime.strptime(end_date, fmt) - datetime.strptime(start_date, fmt)).days + 1
-    )
-    for row in rows:
-        row["username"] = username
-        row["app_id"] = app_id
-        row["aff_id"] = aff_id
-        row["start_date"] = start_date
-        row["end_date"] = end_date
-        row["days"] = days_cnt
-
     return rows
 
 
@@ -129,10 +75,9 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
 
     rows = parse_app_data(data.get("data", [])) or []
     # 计算天数
-    from datetime import datetime as _dt
     fmt = "%Y-%m-%d"
     days_cnt = (
-        (_dt.strptime(end_date, fmt) - _dt.strptime(start_date, fmt)).days + 1
+        (datetime.strptime(end_date, fmt) - datetime.strptime(start_date, fmt)).days + 1
     )
     for row in rows:
         row["username"] = ""
@@ -168,9 +113,6 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
     - 前天及更早：优先返回该日期的最新缓存；若没有则实时查询并落库。
     - 非单日查询：保持原先 2 小时缓存策略。
     """
-
-    from datetime import datetime
-
     fmt = "%Y-%m-%d"
     within_minutes = 120  # 默认 2 小时
     days_diff = None
@@ -184,7 +126,6 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
         # 日期解析失败时，走默认缓存与实时查询逻辑
         pass
 
-    # 前天及更早：优先返回该日期的缓存；若没有则在线查询并落库
     if days_diff is not None and days_diff >= 2:
         cached_prev = UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id)
         if cached_prev:
@@ -265,10 +206,9 @@ def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: s
 
 
 def update_daily_data():
-    """每天更新一次数据：遍历所有启用的 pid 用户，按其 app 列表更新昨天数据。
-    仅处理 UserAppDAO 中 user_type_id 为 'pid' 的应用（兼容历史为空的情况）。
     """
-    from datetime import datetime, timedelta
+    每天更新一次数据：遍历所有启用的 pid 用户，按目前系统启动的offer中的app列表更新昨天数据。
+    """
     target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
     user_proxies = UserProxyDAO.get_enable()
@@ -277,45 +217,51 @@ def update_daily_data():
         return
 
     pids = [p.get("pid") for p in user_proxies if p.get("pid")]
-    pid_user_map = UserDAO.get_users_by_pids(pids)
+
+    pid_offer_map = OfferDAO.get_list_by_pids_group_pid(pids)
+    offer_id_aff_map = AffDAO.get_list_by_offer_ids_group([o["offer_id"] for o in pid_offer_map.values()])
 
     total_apps = 0
     total_success = 0
     for pid in pids:
-        user = pid_user_map.get(pid)
-        if not user:
-            logger.error(f"User with pid={pid} not found for daily update.")
-            continue
-        username = user["email"]
-
         # 获取该用户的应用列表
-        apps = UserAppDAO.get_user_apps(username)
-        if not apps:
+        logger.info(f"Daily update for pid={pid}")
+        offers = pid_offer_map.get(pid)
+        if not offers:
+            logger.info(f"Daily update for pid={pid} with no offers.")
             continue
-
-        # 仅选择 user_type_id 为 'pid' 的应用；兼容历史记录为空(None)时也视为 pid 账号下应用
-        pid_apps = [a for a in apps if (a.get("user_type_id") == 'pid' or a.get("user_type_id") in (None, ''))]
 
         pid_total_apps = 0
         pid_success = 0
-        for app in pid_apps:
-            app_id = app["app_id"]
+        for offer in offers:
+            offer_id = offer["id"]
+            app_id = offer["app_id"]
+            logger.info(f"Daily update for pid={pid}, offer_id={offer['id']}, app_id={offer['app_id']}")
             total_apps += 1
             pid_total_apps += 1
-            try:
-                rows = try_get_and_save_data(pid, app_id, target_date, target_date)
-                if rows:
-                    total_success += 1
-                    pid_success += 1
-            except Exception:
-                logger.exception(f"Daily update failed for pid={pid}, app_id={app_id}")
+            affs = offer_id_aff_map.get(str(offer_id), [])
+            for aff in affs:
+                aff_id = aff.get("aff_id")
+                need_proxy = aff.get("need_proxy")
+                if not aff_id or not need_proxy:
+                    logger.info(f"Daily update for pid={pid}, app_id={app_id}, offer_id={offer_id}, aff_id={aff_id} with no need_proxy.")
+                    continue
+
+                try:
+                    logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, offer_id={offer_id}, aff_id={aff_id}")
+                    rows = try_get_and_save_data(pid, app_id, target_date, target_date, aff_id=aff_id)
+                    if rows:
+                        total_success += 1
+                        pid_success += 1
+                    logger.info(f"End Daily update success for pid={pid}, count={len(rows)}")
+                except Exception:
+                    logger.exception(f"Daily update failed for pid={pid}, app_id={app_id}")
 
         # 输出当前pid的处理统计
         logger.info(
-            "Daily data update stats: target_date=%s pid=%s username=%s apps=%d success=%d",
+            "Daily data update stats: target_date=%s pid=%s apps=%d success=%d",
             target_date,
             pid,
-            username,
             pid_total_apps,
             pid_success,
         )
