@@ -30,7 +30,7 @@ class AffDAO:
         placeholders = ",".join(["%s"] * len(offer_ids))
         sql = (
             f"SELECT id, campaign AS offer_id, customer AS aff_id "
-            f"FROM {cls.TABLE} WHERE live = 1 AND need_proxy=1 AND campaign IN ({placeholders})"
+            f"FROM {cls.TABLE} WHERE live = 1 AND campaign IN ({placeholders})"
         )
         try:
             return mysql_pool.select(sql, tuple(offer_ids))

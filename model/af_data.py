@@ -86,3 +86,139 @@ class AfAppDataDAO:
         except Exception as e:
             logger.exception("AfAppDataDAO.upsert_bulk_odku failed: err=%s", e)
             return 0
+
+    @staticmethod
+    def upsert_one_safe(item: Dict, lock_timeout: int = 5) -> bool:
+        """在无法建立唯一索引时的安全 upsert：仅更新不删除；若不存在则插入。单事务减少往返。
+        - 需要键：app_id, pid, offer_id, aff_id, date
+        - 并发安全：对每个键使用建议锁，避免并发写入冲突
+        - 语义：覆盖更新（更新 clicks/installs/updated_at），不存在则插入一条
+        """
+        required = {"app_id", "pid", "offer_id", "aff_id", "date"}
+        if not required.issubset(item.keys()):
+            logger.warning("upsert_one_safe skip invalid item: missing keys from %s", item)
+            return False
+        lock_key = f"af_data|{item['app_id']}|{item['pid']}|{item['offer_id']}|{item['aff_id']}|{item['date']}"
+        conn = report_mysql_pool.get_conn()
+        cursor = conn.cursor()
+        try:
+            try:
+                cursor.execute("SELECT GET_LOCK(%s, %s)", (lock_key, lock_timeout))
+            except Exception:
+                logger.debug("GET_LOCK unsupported; proceed without advisory lock key=%s", lock_key)
+            clicks = int(item.get("af_clicks", 0) or 0)
+            installs = int(item.get("af_installs", 0) or 0)
+            # 先尝试更新（仅更新，不删除）
+            update_sql = (
+                f"UPDATE {AfAppDataDAO.TABLE} SET clicks=%s, installs=%s, updated_at=NOW() "
+                f"WHERE app_id=%s AND pid=%s AND offer_id=%s AND aff_id=%s AND `date`=%s"
+            )
+            cursor.execute(
+                update_sql,
+                (clicks, installs, item["app_id"], item["pid"], item["offer_id"], item["aff_id"], item["date"]),
+            )
+            if cursor.rowcount == 0:
+                # 不存在则插入
+                insert_sql = (
+                    f"INSERT INTO {AfAppDataDAO.TABLE} (offer_id, aff_id, clicks, installs, app_id, pid, `date`, updated_at) "
+                    f"VALUES (%s,%s,%s,%s,%s,%s,%s,NOW())"
+                )
+                cursor.execute(
+                    insert_sql,
+                    (
+                        item["offer_id"], item["aff_id"], clicks, installs,
+                        item["app_id"], item["pid"], item["date"],
+                    ),
+                )
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            logger.exception("AfAppDataDAO.upsert_one_safe failed: err=%s item=%s", e, item)
+            return False
+        finally:
+            try:
+                cursor.execute("SELECT RELEASE_LOCK(%s)", (lock_key,))
+            except Exception:
+                pass
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def upsert_bulk_safe(items: List[Dict], lock_timeout: int = 5) -> int:
+        """批量安全 upsert：仅更新不删除；对不存在的键再插入。单事务批量 UPDATE + 条件 INSERT。
+        - 不依赖唯一索引；保证并发下同键做覆盖更新
+        - 构造衍生数据表（UNION ALL）进行 JOIN 更新与插入，减少往返
+        """
+        if not items:
+            return 0
+        required = {"offer_id", "aff_id", "date", "app_id", "pid"}
+        # 本地去重：同键只保留最后一条（覆盖语义）
+        dedup_map: Dict[tuple, Dict] = {}
+        for it in items:
+            if not required.issubset(it.keys()):
+                logger.warning("upsert_bulk_safe skip invalid item: missing keys from %s", it)
+                continue
+            key = (it["offer_id"], it["aff_id"], it["date"])
+            dedup_map[key] = it
+        if not dedup_map:
+            return 0
+
+        values = list(dedup_map.values())
+        # 构造衍生数据表（UNION ALL），包含所有键与目标值
+        rows_sql_parts: List[str] = []
+        params: List = []
+        for it in values:
+            rows_sql_parts.append(
+                "SELECT %s AS app_id, %s AS pid, %s AS offer_id, %s AS aff_id, %s AS `date`, %s AS clicks, %s AS installs"
+            )
+            params.extend([
+                it["app_id"], it["pid"], it["offer_id"], it["aff_id"], it["date"],
+                int(it.get("af_clicks", 0) or 0), int(it.get("af_installs", 0) or 0),
+            ])
+        derived_sql = " UNION ALL ".join(rows_sql_parts)
+
+        # 批量 UPDATE（仅更新不删除），将 af_data 与衍生表按复合键 JOIN
+        update_sql = (
+            f"UPDATE {AfAppDataDAO.TABLE} AS a "
+            f"JOIN ({derived_sql}) AS v "
+            f"ON a.offer_id=v.offer_id AND a.aff_id=v.aff_id AND a.`date`=v.`date` "
+            f"SET a.clicks=v.clicks, a.installs=v.installs, a.app_id=v.app_id, a.pid=v.pid, a.updated_at=NOW()"
+        )
+
+        # 对不存在的键进行 INSERT（条件插入），避免删除
+        insert_sql = (
+            f"INSERT INTO {AfAppDataDAO.TABLE} (offer_id, aff_id, clicks, installs, app_id, pid, `date`, updated_at) "
+            f"SELECT v.offer_id, v.aff_id, v.clicks, v.installs, v.app_id, v.pid, v.`date`, NOW() "
+            f"FROM ({derived_sql}) AS v "
+            f"LEFT JOIN {AfAppDataDAO.TABLE} AS a "
+            f"ON a.offer_id=v.offer_id AND a.aff_id=v.aff_id AND a.`date`=v.`date` "
+            f"WHERE a.offer_id IS NULL"
+        )
+
+        conn = report_mysql_pool.get_conn()
+        cursor = conn.cursor()
+        try:
+            try:
+                # 批次级建议锁，减少并发批次之间的冲突
+                cursor.execute("SELECT GET_LOCK(%s, %s)", ("af_data_bulk", lock_timeout))
+            except Exception:
+                logger.debug("GET_LOCK unsupported; proceed without bulk advisory lock")
+            # 单事务：先 UPDATE，再条件 INSERT
+            cursor.execute(update_sql, tuple(params))
+            updated_count = cursor.rowcount
+            cursor.execute(insert_sql, tuple(params))
+            inserted_count = cursor.rowcount
+            conn.commit()
+            return int(updated_count or 0) + int(inserted_count or 0)
+        except Exception as e:
+                conn.rollback()
+                logger.exception("AfAppDataDAO.upsert_bulk_safe failed: err=%s", e)
+                return 0
+        finally:
+            try:
+                cursor.execute("SELECT RELEASE_LOCK(%s)", ("af_data_bulk",))
+            except Exception:
+                pass
+            cursor.close()
+            conn.close()

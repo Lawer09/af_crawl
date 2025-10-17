@@ -10,6 +10,7 @@ from model.offer import OfferDAO
 from model.aff import AffDAO
 from model.user import UserProxyDAO
 from utils.retry import request_with_retry
+from core.db import mysql_pool
 
 logger = logging.getLogger(__name__)
 
@@ -136,10 +137,12 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
         for row in rows:
             row['pid'] = pid
             if int(row['days']) == 1:
-                af_rows.append(row)
+                af_row = row.copy()
+                af_row['date'] = start_date
+                af_rows.append(af_row)
         UserAppDataDAO.save_data_bulk(rows)
         # 只插入af数据中开始日期和结束日期相同的数据
-        AfAppDataDAO.upsert_bulk(af_rows)
+        AfAppDataDAO.upsert_bulk_safe(af_rows)
         return rows
 
     # 昨天：扩大缓存窗口到 4 小时
@@ -158,13 +161,15 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
     for row in rows:
         row['pid'] = pid
         if int(row['days']) == 1:
-            af_rows.append(row)
+            af_row = row.copy()
+            af_row['date'] = start_date
+            af_rows.append(af_row)
 
     # 3. 落库
     UserAppDataDAO.save_data_bulk(rows)
     # 只插入af数据中开始日期和结束日期相同的数据
     
-    AfAppDataDAO.upsert_bulk(af_rows)
+    AfAppDataDAO.upsert_bulk_safe(af_rows)
     return rows
 
 
@@ -277,5 +282,139 @@ def update_daily_data():
         )
 
     logger.info("Daily data update finished: target_date=%s, apps=%d, success=%d", target_date, total_apps, total_success)
+
+
+def sync_all_user_app_data_latest_to_af_data() -> int:
+    """同步 af_user_app_data 中所有 days=1 的最新记录到 af_data。
+    - 分组键：(pid, app_id, offer_id, aff_id, end_date)
+    - 每组选择 created_at 最大的一条作为“最新数据”
+    - 只处理 days=1（单日），写入 af_data 的 `date`=end_date
+    - 使用 AfAppDataDAO.upsert_bulk_safe 做覆盖更新（仅更新不删除）
+    返回：成功更新/插入的总记录条数
+    """
+    # 选取每个 (pid, app_id, offer_id, aff_id, end_date) 的最新记录（days=1）
+    sql = """
+    SELECT t.pid, t.app_id, t.offer_id, t.aff_id, t.af_clicks, t.af_installs, t.end_date AS `date`, t.created_at
+    FROM af_user_app_data AS t
+    JOIN (
+        SELECT pid, app_id, offer_id, aff_id, end_date, MAX(created_at) AS max_created
+        FROM af_user_app_data
+        WHERE days = 1
+        GROUP BY pid, app_id, offer_id, aff_id, end_date
+    ) AS m
+    ON t.pid = m.pid AND t.app_id = m.app_id AND t.offer_id = m.offer_id AND (t.aff_id <=> m.aff_id) AND t.end_date = m.end_date AND t.created_at = m.max_created
+    WHERE t.days = 1 AND t.aff_id IS NOT NULL AND t.aff_id <> ''
+    """
+    try:
+        rows = mysql_pool.select(sql)
+    except Exception as e:
+        logger.exception("sync_all_user_app_data_latest_to_af_data: read latest cache failed: %s", e)
+        return 0
+
+    if not rows:
+        return 0
+
+    # 组装写入 af_data 的行
+    to_write: List[Dict] = []
+    for r in rows:
+        try:
+            to_write.append({
+                "offer_id": r.get("offer_id"),
+                "aff_id": r.get("aff_id"),
+                "af_clicks": int(r.get("af_clicks", 0) or 0),
+                "af_installs": int(r.get("af_installs", 0) or 0),
+                "app_id": r.get("app_id"),
+                "pid": r.get("pid"),
+                "date": str(r.get("date")),
+            })
+        except Exception:
+            # 单条异常不阻断整个批次
+            logger.warning("sync_all_user_app_data_latest_to_af_data: skip invalid row=%s", r)
+            continue
+
+    if not to_write:
+        return 0
+
+    # 分批 upsert，避免 SQL 构造过长
+    CHUNK = 500
+    total = 0
+    for i in range(0, len(to_write), CHUNK):
+        chunk = to_write[i:i+CHUNK]
+        try:
+            total += AfAppDataDAO.upsert_bulk_safe(chunk, lock_timeout=5)
+        except Exception:
+            logger.exception("sync_all_user_app_data_latest_to_af_data: upsert chunk failed size=%d", len(chunk))
+            continue
+
+    logger.info("sync_all_user_app_data_latest_to_af_data: done, rows=%d updated=%d", len(to_write), total)
+    return total
+
+
+def sync_user_app_data_to_af_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None) -> int:
+    """将 UserAppDataDAO 中最新缓存的数据按指定日期范围同步到 AfAppDataDAO。
+    - 逐日处理：对每个日期(day)读取缓存表最新一条记录（created_at DESC），按 (offer_id, aff_id) 取最新。
+    - 仅写入单日数据：要求 day 的缓存记录 days=1（start=end=day）。
+    - 当 aff_id 未指定时，将对该日的所有渠道分别写入（按每个 (offer_id, aff_id) 最新一条）。
+    - 不依赖唯一索引：调用 AfAppDataDAO.upsert_bulk_safe 使用 GET_LOCK+DELETE+INSERT 保证并发安全。
+    返回：成功写入/更新的记录条数。
+    """
+    try:
+        fmt = "%Y-%m-%d"
+        start = datetime.strptime(start_date, fmt).date()
+        end = datetime.strptime(end_date, fmt).date()
+        if start > end:
+            start, end = end, start
+    except Exception:
+        logger.exception("sync_user_app_data_to_af_data: invalid date range start=%s end=%s", start_date, end_date)
+        return 0
+
+    to_write: List[Dict] = []
+    cur = start
+    while cur <= end:
+        day_str = cur.strftime("%Y-%m-%d")
+        try:
+            rows = UserAppDataDAO.get_rows_by_date(pid, app_id, day_str, day_str, aff_id)
+        except Exception as e:
+            logger.exception("sync_user_app_data_to_af_data: read cache failed pid=%s app_id=%s date=%s err=%s", pid, app_id, day_str, e)
+            rows = []
+        if not rows:
+            cur = cur + timedelta(days=1)
+            continue
+        # 选择每个 (offer_id, aff_id) 的最新一条记录（get_rows_by_date 已按 created_at DESC）
+        latest_map: Dict[tuple, Dict] = {}
+        for r in rows:
+            off = r.get("offer_id")
+            aff = r.get("aff_id")
+            if not aff:
+                # 缺少渠道无法在 af_data 形成键，跳过
+                continue
+            key = (off, aff)
+            if key not in latest_map:
+                latest_map[key] = r
+        # 仅写入单日（days=1）的记录
+        for (_, _), r in latest_map.items():
+            if int(r.get("days", 0) or 0) != 1:
+                continue
+            to_write.append({
+                "offer_id": r.get("offer_id"),
+                "aff_id": r.get("aff_id"),
+                "af_clicks": int(r.get("af_clicks", 0) or 0),
+                "af_installs": int(r.get("af_installs", 0) or 0),
+                "app_id": r.get("app_id"),
+                "pid": pid,
+                "date": day_str,
+            })
+        cur = cur + timedelta(days=1)
+
+    if not to_write:
+        return 0
+
+    try:
+        # 使用安全 upsert（不依赖唯一索引）
+        affected = AfAppDataDAO.upsert_bulk_safe(to_write, lock_timeout=5)
+        return affected
+    except Exception as e:
+        logger.exception("sync_user_app_data_to_af_data: upsert failed pid=%s app_id=%s range=%s..%s err=%s", pid, app_id, start_date, end_date, e)
+        return 0
 
 

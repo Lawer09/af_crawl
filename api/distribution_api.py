@@ -14,7 +14,7 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
-from services.data_service import fetch_by_pid_and_offer_id,fetch_with_overall_report_counts
+from services.data_service import fetch_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data
 from services.app_service import fetch_app_by_pid
 from services.authorize_service import prt_auth
 
@@ -97,8 +97,7 @@ def get_user_app_data_by_pid(
     app_id: str = Query(..., description="应用ID"),
     aff_id: Optional[str] = Query(None, description="aff ID（可选）"),
     offer_id: Optional[str] = Query(None, description="offer ID（可选）"),
-    start_date: str = Query(..., description="开始日期，YYYY-MM-DD"),
-    end_date: str = Query(..., description="结束日期，YYYY-MM-DD")
+    date: str = Query(..., description="日期，YYYY-MM-DD"),
 ):
     """通过 pid 获取账号信息后拉取用户 app 数据"""
     try:
@@ -107,8 +106,8 @@ def get_user_app_data_by_pid(
             app_id=app_id,
             aff_id=aff_id,
             offer_id=offer_id,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=date,
+            end_date=date,
         )
         
         return {"status": "success", "data": rows}
@@ -697,3 +696,14 @@ def stop_distribution_services():
         
     except Exception as e:
         logger.exception(f"Error stopping distribution services: {e}")
+
+
+@router.post("/sync-all-latest")
+def sync_all_af_data_latest():
+    """同步 af_user_app_data 中最新的 days=1 数据到 af_data（全量）。"""
+    try:
+        updated = sync_all_user_app_data_latest_to_af_data()
+        return {"status": "success", "updated": updated}
+    except Exception as e:
+        logger.exception(f"Error syncing latest user_app_data to af_data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
