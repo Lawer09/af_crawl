@@ -1,5 +1,7 @@
+import time
 from typing import List, Dict
 import logging
+import random
 from datetime import datetime, timedelta
 import config.af_config as cfg
 from services.login_service import get_session, get_session_by_pid
@@ -242,6 +244,7 @@ def update_daily_data():
     total_apps = 0
     total_success = 0
     for pid in pids:
+        time.sleep(random.uniform(4.5, 8.5))
         # 获取该用户的应用列表
         offers = pid_offer_map.get(pid)
         if not offers:
