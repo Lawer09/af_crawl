@@ -239,7 +239,6 @@ def update_daily_data():
     pids = [p.get("pid") for p in user_proxies if p.get("pid")]
 
     pid_offer_map = OfferDAO.get_list_by_pids_group_pid(pids)
-    offer_id_aff_map = AffDAO.get_list_by_offer_ids_group([offer["id"] for offers in pid_offer_map.values() for offer in offers])
 
     total_apps = 0
     total_success = 0
@@ -254,11 +253,13 @@ def update_daily_data():
         pid_success = 0
 
         app_aff_map = get_app_aff_map_from_offers(offers)
-
+        app_count = len(app_aff_map.keys())
+        app_index = 0
         for app_id, aff_ids in app_aff_map.items():
+            app_index += 1
+            logger.info(f"{app_index}/{app_count} Daily update pid=%s app_id=%s", pid, app_id)
             for aff_id in aff_ids:
                 time.sleep(random.uniform(3.5, 6.5))
-                logger.info("Daily update pid=%s app_id=%s aff_ids=%s", pid, app_id, aff_ids)
                 try:
                     logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, aff_id={aff_id}")
                     rows = try_get_and_save_data(pid, app_id, target_date, target_date, aff_id=aff_id)
