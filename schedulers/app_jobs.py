@@ -39,12 +39,11 @@ def run_update_apps_cron(interval_minutes: int = 60):
 def start_update_data_scheduler(interval_hours: int = 24):
     """启动后台定时任务，每 interval_hours 小时更新一次数据（昨天的）。"""
     def _runner():
-        while True:
-            try:
-                update_daily_data()
-            except Exception:
-                logger.exception("update_daily_data scheduled run failed")
-            # time.sleep(interval_hours * 3600)
+        try:
+            update_daily_data()
+        except Exception:
+            logger.exception("update_daily_data scheduled run failed")
+        # time.sleep(interval_hours * 3600)
 
     t = threading.Thread(target=_runner, name="update_data_scheduler", daemon=True)
     t.start()

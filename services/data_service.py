@@ -240,6 +240,17 @@ def update_daily_data():
 
     pid_offer_map = OfferDAO.get_list_by_pids_group_pid(pids)
 
+    # 根据 app_id 数量自增排序 pids
+    try:
+        pid_app_counts = {
+            pid: len({str(o.get("app_id")) for o in (pid_offer_map.get(pid) or []) if o.get("app_id")})
+            for pid in pids
+        }
+        pids = sorted(pids, key=lambda x: pid_app_counts.get(x, 0))
+        logger.info("Daily update pid order (asc by app_id count): %s", [(pid, pid_app_counts.get(pid, 0)) for pid in pids])
+    except Exception:
+        logger.exception("Sort pids by app_id count failed; keep original order.")
+
     total_apps = 0
     total_success = 0
     for pid in pids:
