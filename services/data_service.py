@@ -190,6 +190,20 @@ def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: s
     # AF侧按单日查询
     rows = fetch_by_pid_and_offer_id(pid, app_id, offer_id, date, date, aff_id)
 
+    # 仅保留每个 (offer_id, aff_id, date) 的最新快照（当来源是缓存时，数据已按 created_at DESC 排序）
+    latest_rows: List[Dict] = []
+    seen_keys = set()
+    for r in rows:
+        oid = r.get("offer_id")
+        aff_val = r.get("aff_id", aff_id)
+        aff_key = str(aff_val) if aff_val is not None else ""
+        key = (str(oid) if oid is not None else "", aff_key, date)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        latest_rows.append(r)
+    rows = latest_rows
+
     enriched: List[Dict] = []
     for row in rows:
         # 解析 offer_id/aff_id
@@ -425,7 +439,6 @@ def sync_user_app_data_to_af_data(pid: str, app_id: str, start_date: str, end_da
     except Exception as e:
         logger.exception("sync_user_app_data_to_af_data: upsert failed pid=%s app_id=%s range=%s..%s err=%s", pid, app_id, start_date, end_date, e)
         return 0
-
 
 
 def get_app_aff_map_from_offers(offers: List[Dict]) -> Dict[str, List[str]]:
