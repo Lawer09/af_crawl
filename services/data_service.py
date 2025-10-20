@@ -4,6 +4,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 import config.af_config as cfg
+from services.fs_service import send_message
 from services.login_service import get_session, get_session_by_pid
 from model.user_app_data import UserAppDataDAO
 from model.af_data import AfAppDataDAO
@@ -239,6 +240,14 @@ def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: s
     return enriched
 
 
+def get_daily_data_ret_message(pids: List[str], date:str) -> str:
+    """获取指定日期的所有pid的daily data返回消息"""
+    message = f"AF数据已更新-更新日期：{date}\nPID列表：\n"
+    for pid in pids:
+        message += f"{pid}\n"
+    return message
+
+
 def update_daily_data():
     """
     每天更新一次数据：遍历所有启用的 pid 用户，按目前系统启动的offer中的app列表更新昨天数据。
@@ -305,6 +314,9 @@ def update_daily_data():
         )
 
     logger.info("Daily data update finished: target_date=%s, apps=%d, success=%d", target_date, total_apps, total_success)
+    
+    message = get_daily_data_ret_message(pids, target_date)
+    send_message(message, "https://open.feishu.cn/open-apis/bot/v2/hook/d3566c9d-9e1c-40c1-92a6-89d5e08c6363")
 
 
 def sync_all_user_app_data_latest_to_af_data() -> int:
@@ -487,5 +499,4 @@ def get_app_aff_map_from_offers(offers: List[Dict]) -> Dict[str, List[str]]:
         result[app_id] = sorted(aff_ids_set) if aff_ids_set else []
 
     return result
-
 
