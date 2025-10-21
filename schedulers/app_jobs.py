@@ -62,6 +62,7 @@ def run_update_data_cron(interval_hours: int = 24):
 
 def run_data():
     """运行一次"""
+    logger.info("run_data start")
     try:
         update_daily_data()
     except Exception:

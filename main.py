@@ -104,6 +104,7 @@ if __name__ == "__main__":
         from tasks.sync_user_apps import run as sync_apps_run
         logger.info("=== sync_apps start ===")
         sync_apps_run()
+        
     elif args.command == "sync_apps_cron":
         from schedulers.app_jobs import run_update_apps_cron
         run_update_apps_cron(interval_minutes=args.interval_minutes)
@@ -112,6 +113,7 @@ if __name__ == "__main__":
         from tasks.sync_app_data import run as sync_data_run
         logger.info("=== sync_data start days=%d ===", args.days)
         sync_data_run(days=args.days)
+
     elif args.command == "sync_data_cron":
         from schedulers.app_jobs import run_data
         run_data()
