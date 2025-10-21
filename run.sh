@@ -52,79 +52,6 @@ timestamp() {
   date +"%Y-%m-%d %H:%M:%S"
 }
 
-# 显示使用帮助（新增--background说明）
-show_help() {
-    echo "使用方法: $0 <命令> [参数...] [--background]"
-    echo ""
-    echo "通用选项:"
-    echo "  --background                  - 后台运行程序（终端关闭后继续执行）"
-    echo ""
-    echo "支持的命令:"
-    echo "  传统模式:"
-    echo "    sync_apps                    - 同步用户 App 列表"
-    echo "    sync_data [--days N]         - 同步最近 N 天数据（默认1天）"
-    echo "    web                          - 启动Web管理界面"
-    echo ""
-    echo "  计划任务:"
-    echo "    cron [选项]                  - 启动统一定时任务入口"
-    echo "      --apps                    - 启动应用列表定时更新"
-    echo "      --apps-interval-minutes M - 应用任务执行间隔(分钟)，默认1440"
-    echo "      --data                    - 启动应用数据定时更新"
-    echo "      --data-interval-hours H   - 数据任务执行间隔(小时)，默认24"
-    echo ""
-    echo "  分布式模式:"
-    echo "    distribute master [选项]     - 启动分布式主节点"
-    echo "    distribute worker [选项]     - 启动分布式工作节点"
-    echo "    distribute standalone [选项] - 启动独立节点"
-    echo "    distribute status [选项]     - 查看系统状态"
-    echo ""
-    echo "  分布式选项:"
-    echo "    --device-id ID              - 设备ID（可选，未提供时自动生成）"
-    echo "    --device-name NAME          - 设备名称"
-    echo "    --host HOST                 - 监听地址（master模式，默认localhost）"
-    echo "    --port PORT                 - 监听端口（默认7989）"
-    echo "    --master-host HOST          - 主节点地址（worker模式，必需）"
-    echo "    --master-port PORT          - 主节点端口（worker模式，默认7989）"
-    echo "    --dispatch-interval N       - 任务分发间隔秒数（standalone模式，默认10）"
-    echo "    --concurrent-tasks N        - 并发任务数（standalone模式，默认5）"
-    echo "    --enable-monitoring         - 启用性能监控（standalone模式）"
-    echo "    --config FILE               - 配置文件路径"
-    echo ""
-    echo "示例 (后台运行):"
-    echo "  $0 sync_apps --background"
-    echo "  $0 web --background"
-    echo "  $0 distribute standalone --concurrent-tasks 3 --background"
-}
-
-# 验证命令
-validate_command() {
-    local cmd="$1"
-    local subcmd="$2"
-    
-    case "$cmd" in
-        "sync_apps"|"sync_data"|"web"|"cron")
-            return 0
-            ;;
-        "distribute")
-            case "$subcmd" in
-                "master"|"worker"|"standalone"|"status")
-                    return 0
-                    ;;
-                *)
-                    echo "错误: 无效的分布式子命令: $subcmd"
-                    echo "有效的分布式子命令: master, worker, standalone, status"
-                    return 1
-                    ;;
-            esac
-            ;;
-        *)
-            echo "错误: 无效的命令: $cmd"
-            echo "有效命令: sync_apps, sync_data, web, cron, distribute"
-            return 1
-            ;;
-    esac
-}
-
 # 优先处理脚本自身选项（--background）
 BACKGROUND=0
 # 临时存储所有参数，用于过滤
@@ -148,25 +75,6 @@ if [ ${#ALL_ARGS[@]} -ge 2 ]; then
     EXTRA_ARGS=("${ALL_ARGS[@]:2}")
 else
     EXTRA_ARGS=()
-fi
-
-# 如果没有命令，交互输入
-if [ -z "$CMD" ]; then
-    echo "请输入要执行的命令:"
-    echo "可用命令: sync_apps, sync_data, web, cron, distribute"
-    echo "使用 --help 查看详细帮助，添加 --background 可后台运行"
-    read -r CMD
-    
-    if [ "$CMD" = "distribute" ]; then
-        echo "请输入分布式子命令 (master/worker/standalone/status):"
-        read -r SUBCMD
-    fi
-fi
-
-# 检查帮助
-if [ "$CMD" = "--help" ] || [ "$CMD" = "-h" ]; then
-    show_help
-    exit 0
 fi
 
 # 主逻辑（支持后台运行）

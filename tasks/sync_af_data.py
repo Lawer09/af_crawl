@@ -32,10 +32,18 @@ def create_task_data(type:str, pid:str, app_id:str, aff_id:str, date:str) -> Dic
         'date': date,
     })
 
-
-def parse_task_data(task_data:str) -> Dict:
+def parse_task_data(task_data: Any) -> Dict:
     import json
-    return json.loads(task_data)
+    try:
+        if isinstance(task_data, dict):
+            return task_data
+        if isinstance(task_data, (bytes, bytearray)):
+            task_data = task_data.decode('utf-8', errors='ignore')
+        if isinstance(task_data, str):
+            return json.loads(task_data)
+    except Exception as e:
+        logger.warning("Invalid task_data format: %s", e)
+    return {}
 
 
 def create_task(date:str) -> None:
@@ -167,6 +175,7 @@ def handle(tasks:dict):
     for pid, tasks in pid_task_map.items():
         task_queue.put(tasks)
     
+    return
     # 使用线程池处理任务队列
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         # 为每个线程分配任务处理器
