@@ -59,7 +59,7 @@ log "使用入口文件: $ENTRY_FILE"
 
 # 关闭当前正在运行的 cron --data 进程（安全检测，避免 pipefail 在无匹配时退出）
 # 使用 ps + awk 直接匹配，awk 在无匹配时仍返回 0
-PIDS=$(ps -eo pid,command | awk '/(python|python3).*(main|mian)\\.py.*cron.*--data/ {print $1}' || true)
+PIDS=$(ps -eo pid,args --no-header | awk '/python/ && /(main|mian)\\.py/ && /cron/ && /--data/ {print $1}' || true)
 if [ -n "$PIDS" ]; then
   log "检测到正在运行的 cron --data 进程: $PIDS，准备关闭"
   kill $PIDS || true
