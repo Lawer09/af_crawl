@@ -4,6 +4,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 import config.af_config as cfg
+from config.settings import CRAWLER
 from services.fs_service import send_message
 from services.login_service import get_session_by_pid
 from model.user_app_data import UserAppDataDAO
@@ -14,8 +15,35 @@ from model.aff import OfferAffDAO, AffDAO
 from model.user import UserProxyDAO
 from utils.retry import request_with_retry
 from core.db import mysql_pool
+import threading
 
 logger = logging.getLogger(__name__)
+
+# ------------------ singleflight (per-key) ------------------
+_sf_lock = threading.RLock()
+_sf_events: Dict[str, threading.Event] = {}
+
+def _sf_begin(key: str) -> tuple[bool, threading.Event]:
+    """Mark a key as in-flight. Returns (is_leader, event_to_wait)."""
+    with _sf_lock:
+        ev = _sf_events.get(key)
+        if ev is None:
+            ev = threading.Event()
+            _sf_events[key] = ev
+            return True, ev
+        return False, ev
+
+def _sf_end(key: str) -> None:
+    """Finish in-flight and wake followers."""
+    ev: threading.Event | None = None
+    with _sf_lock:
+        ev = _sf_events.pop(key, None)
+    if ev:
+        try:
+            ev.set()
+        except Exception:
+            pass
+
 
 def parse_app_data(data:List[Dict]) -> List[Dict]:
     rows: List[Dict] = []
@@ -150,11 +178,25 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
         # 日期解析失败时，走默认缓存与实时查询逻辑
         pass
 
+    # 构造 singleflight 键（同一 pid/app/day/aff）
+    sf_key = f"appdata|{pid}|{app_id}|{start_date}|{end_date}|{aff_id or ''}"
+    timeout_sec = int(CRAWLER.get('singleflight_timeout_seconds', 60))
+
     if days_diff is not None and days_diff >= 2:
+        # 前天及更早：只用历史缓存；若没有，再进行一次受控抓取
         cached_prev = UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id)
         if cached_prev:
             return cached_prev
-        return fetch_and_save_data(pid, app_id, aff_id, start_date)
+        is_leader, ev = _sf_begin(sf_key)
+        if is_leader:
+            try:
+                return fetch_and_save_data(pid, app_id, aff_id or '', start_date)
+            finally:
+                _sf_end(sf_key)
+        else:
+            # 等待首个线程完成，然后读取缓存
+            ev.wait(timeout=timeout_sec)
+            return UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id) or []
 
     # 昨天：扩大缓存窗口到 4 小时
     if days_diff == 1:
@@ -165,8 +207,22 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
     if cached:
         return cached
 
-    # 2. 无缓存则实时查询
-    return fetch_and_save_data(pid, app_id, aff_id, start_date)
+    # 2. 无缓存则实时查询（singleflight 防并发）
+    is_leader, ev = _sf_begin(sf_key)
+    if is_leader:
+        try:
+            return fetch_and_save_data(pid, app_id, aff_id or '', start_date)
+        finally:
+            _sf_end(sf_key)
+    else:
+        # 跟随者等待领导者写入缓存，再读取
+        ev.wait(timeout=timeout_sec)
+        after = UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, aff_id, within_minutes)
+        if after:
+            return after
+        # 若仍无缓存，进行轻微退避后再查一次（避免惊群）
+        time.sleep(random.uniform(0.3, 0.8))
+        return UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, aff_id, within_minutes) or []
 
 
 def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str | None = None, start_date: str = None, end_date: str = None, aff_id: str | None = None):

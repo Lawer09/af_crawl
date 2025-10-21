@@ -6,8 +6,9 @@ from typing import Optional, Dict
 import requests
 from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext
 import time
+import threading
 from model.cookie import cookie_model
-from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES
+from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES, CRAWLER
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,10 @@ class SessionManager:
         self._pwd_cache: Dict[str, tuple[str, str | None]] = {}
         # 缓存用户代理配置，确保命中 cookie 时与自动刷新均沿用相同代理
         self._proxy_cache: Dict[str, Optional[dict]] = {}
+        # 单航道控制（按用户名）
+        self._sf_lock = threading.RLock()
+        self._sf_events: Dict[str, threading.Event] = {}
+        self._sf_timeout = int(CRAWLER.get("singleflight_timeout_seconds", 60))
 
     # ------------------ public ------------------
     def get_session(
@@ -54,47 +59,93 @@ class SessionManager:
                 sess.proxies.update(proxies)
             self._proxy_cache[username] = proxies
             return sess
-        # --- 登录重试 ---
+        # --- 登录重试（单航道） ---
         cookies = None
         expired_at = None
         ua = self._sanitize_user_agent(browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]) 
         max_attempts = 2
-        for attempt in range(max_attempts):
-            try:
-                logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt + 1)
-                bc_args = dict(browser_context_args or {})
-                bc_args["user_agent"] = ua
-                cookies, expired_at, ua = self._login_by_playwright(username, password, bc_args, proxies)
-                break
-            except Exception as e:
-                # 特殊处理 UA 非法字符错误：展示 UA 并直接终止登录尝试
-                if "Invalid characters found in userAgent" in str(e):
-                    bad_ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
-                    logger.error("Invalid User-Agent detected, abort login -> username=%s ua=%r", username, bad_ua)
-                    raise
-                logger.warning("login failed #%s -> %s", attempt + 1, e)
-                # 最后一轮仍失败则抛出，避免后续使用未初始化变量
-                if attempt == max_attempts - 1:
-                    raise
-                time.sleep(15 * (attempt + 1))
 
-        # 3. 写入 DB
-        cookie_model.add_or_update_cookie(
-            username=username,
-            password=password,
-            cookies=cookies,
-            expired_at=expired_at,
-            user_agent=ua,
-        )
-
-        sess = self._build_requests_session(cookies, ua, username)
-        if proxies:
-            sess.proxies.update(proxies)
-        # 缓存密码供刷新
-        self._pwd_cache[username] = (password, ua)
-        # 缓存代理供刷新沿用
-        self._proxy_cache[username] = proxies
-        return sess
+        # 单航道：同一用户名只允许一个线程执行浏览器登录
+        leader, ev = self._sf_begin(f"login|{username}")
+        if leader:
+            for attempt in range(max_attempts):
+                try:
+                    logger.info("cookie miss, login(page+api) -> %s (try %s)", username, attempt + 1)
+                    bc_args = dict(browser_context_args or {})
+                    bc_args["user_agent"] = ua
+                    cookies, expired_at, ua = self._login_by_playwright(username, password, bc_args, proxies)
+                    break
+                except Exception as e:
+                    # 特殊处理 UA 非法字符错误：展示 UA 并直接终止登录尝试
+                    if "Invalid characters found in userAgent" in str(e):
+                        bad_ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
+                        logger.error("Invalid User-Agent detected, abort login -> username=%s ua=%r", username, bad_ua)
+                        self._sf_end(f"login|{username}")
+                        raise
+                    logger.warning("login failed #%s -> %s", attempt + 1, e)
+                    if attempt == max_attempts - 1:
+                        self._sf_end(f"login|{username}")
+                        raise
+                    time.sleep(15 * (attempt + 1))
+            # 3. 写入 DB
+            cookie_model.add_or_update_cookie(
+                username=username,
+                password=password,
+                cookies=cookies,
+                expired_at=expired_at,
+                user_agent=ua,
+            )
+            sess = self._build_requests_session(cookies, ua, username)
+            if proxies:
+                sess.proxies.update(proxies)
+            self._pwd_cache[username] = (password, ua)
+            self._proxy_cache[username] = proxies
+            # 结束单航道
+            self._sf_end(f"login|{username}")
+            return sess
+        else:
+            # 跟随者等待登录完成后复用 DB 中的最新 cookie
+            ev.wait(self._sf_timeout)
+            record2 = cookie_model.get_cookie_by_username(username)
+            if record2 and not self._is_expired(record2["expired_at"]):
+                ua_cfg = browser_context_args.get("user_agent", record2.get("user_agent")) or PLAYWRIGHT["user_agent"]
+                ua_cfg = self._sanitize_user_agent(ua_cfg)
+                self._pwd_cache[username] = (password, ua_cfg)
+                sess = self._build_requests_session(record2["cookies"], ua_cfg, username)
+                if proxies:
+                    sess.proxies.update(proxies)
+                self._proxy_cache[username] = proxies
+                return sess
+            # 若等待超时或登录失败未写库，则尝试一次本地登录（避免永久失败）
+            for attempt in range(max_attempts):
+                try:
+                    logger.info("follower fallback login -> %s (try %s)", username, attempt + 1)
+                    bc_args = dict(browser_context_args or {})
+                    bc_args["user_agent"] = ua
+                    cookies, expired_at, ua = self._login_by_playwright(username, password, bc_args, proxies)
+                    break
+                except Exception as e:
+                    if "Invalid characters found in userAgent" in str(e):
+                        bad_ua = browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]
+                        logger.error("Invalid User-Agent detected, abort fallback -> username=%s ua=%r", username, bad_ua)
+                        raise
+                    logger.warning("fallback login failed #%s -> %s", attempt + 1, e)
+                    if attempt == max_attempts - 1:
+                        raise
+                    time.sleep(15 * (attempt + 1))
+            cookie_model.add_or_update_cookie(
+                username=username,
+                password=password,
+                cookies=cookies,
+                expired_at=expired_at,
+                user_agent=ua,
+            )
+            sess = self._build_requests_session(cookies, ua, username)
+            if proxies:
+                sess.proxies.update(proxies)
+            self._pwd_cache[username] = (password, ua)
+            self._proxy_cache[username] = proxies
+            return sess
 
     # ------------------ inner ------------------
     def _is_expired(self, expired_at: datetime) -> bool:
@@ -123,6 +174,27 @@ class SessionManager:
         s.hooks.setdefault('response', []).append(self._check_token)
         return s
 
+    # ------------------ singleflight helpers ------------------
+    def _sf_begin(self, key: str) -> tuple[bool, threading.Event]:
+        with self._sf_lock:
+            ev = self._sf_events.get(key)
+            if ev is None or ev.is_set():
+                ev = threading.Event()
+                ev.clear()
+                self._sf_events[key] = ev
+                return True, ev
+            return False, ev
+
+    def _sf_end(self, key: str) -> None:
+        with self._sf_lock:
+            ev = self._sf_events.get(key)
+            if ev:
+                ev.set()
+                try:
+                    del self._sf_events[key]
+                except Exception:
+                    pass
+
     # ------------------ token 检测 ------------------
     def _check_token(self, resp: requests.Response, *args, **kwargs):
 
@@ -140,27 +212,50 @@ class SessionManager:
 
             password, ua = pwd_tuple
 
-            proxies = self._proxy_cache.get(username) or None
+            # 优先使用请求头中的代理信息，其次退回缓存的代理
+            proxy_header = resp.request.headers.get('X-Proxy-URL')
+            proxies = None
+            if proxy_header:
+                proxies = {"http": proxy_header, "https": proxy_header}
+            else:
+                proxies = self._proxy_cache.get(username) or None
 
-            logger.info("认证失败，尝试自动刷新 -> %s : %s proxy: %s", username, password, proxies)
-            try:
-                cookies, expired_at, ua_new = self._login_by_playwright(
-                    username,
-                    password,
-                    {"user_agent": ua} if ua else {},
-                    # 刷新时沿用旧的代理
-                    self._proxy_cache.get(username),
-                )
-                # 更新 DB
-                cookie_model.add_or_update_cookie(username=username, password=password, cookies=cookies,
-                                                 expired_at=expired_at, user_agent=ua_new)
-                # 更新 session cookie
-                resp.request._cookies.clear()
-                for c in cookies:
-                    resp.request._cookies.set(c['name'], c['value'], domain=c.get('domain'), path=c.get('path'))
-            except Exception as e:
-                logger.exception("自动刷新失败 -> %s", e)
-
+            logger.info("认证失败，尝试自动刷新(单航道) -> %s proxy: %s", username, proxies)
+            key = f"refresh|{username}"
+            leader, ev = self._sf_begin(key)
+            if leader:
+                try:
+                    cookies, expired_at, ua_new = self._login_by_playwright(
+                        username,
+                        password,
+                        {"user_agent": ua} if ua else {},
+                        proxies,
+                    )
+                    # 更新 DB
+                    cookie_model.add_or_update_cookie(username=username, password=password, cookies=cookies,
+                                                     expired_at=expired_at, user_agent=ua_new)
+                    # 更新请求 cookie（准备重试）
+                    try:
+                        resp.request._cookies.clear()
+                        for c in cookies:
+                            resp.request._cookies.set(c['name'], c['value'], domain=c.get('domain'), path=c.get('path'))
+                    except Exception:
+                        pass
+                except Exception as e:
+                    logger.exception("自动刷新失败 -> %s", e)
+                finally:
+                    self._sf_end(key)
+            else:
+                # 跟随者等待刷新完成后，从 DB 读取最新 cookie
+                ev.wait(self._sf_timeout)
+                try:
+                    record = cookie_model.get_cookie_by_username(username)
+                    if record and not self._is_expired(record["expired_at"]):
+                        resp.request._cookies.clear()
+                        for c in record["cookies"]:
+                            resp.request._cookies.set(c['name'], c['value'], domain=c.get('domain'), path=c.get('path'))
+                except Exception:
+                    pass
         return resp
 
     # ------------------ playwright ------------------

@@ -70,14 +70,20 @@ class TaskDAO:
         return {row['task_key'] for row in results}
 
     @classmethod
-    def get_all_pending_task(cls, task_type: str, limit: int = 1000) -> List[Dict]:
+    def get_all_pending_task(cls, task_type: Optional[str] = None, limit: int = 1000) -> List[Dict]:
         """
-        获取待执行的任务列表
+        获取待执行的任务列表（过滤重试次数）
         """
-        sql = f"""SELECT * FROM {cls.TABLE}
-                 WHERE task_type=%s AND status='pending' AND next_run_at<=NOW()
-                 ORDER BY next_run_at LIMIT %s"""
-        return mysql_pool.select(sql, (task_type, limit))
+        if task_type:
+            sql = f"""SELECT * FROM {cls.TABLE}
+                     WHERE task_type=%s AND status='pending' AND next_run_at<=NOW() AND retry < max_retry_count
+                     ORDER BY next_run_at LIMIT %s"""
+            return mysql_pool.select(sql, (task_type, limit))
+        else:
+            sql = f"""SELECT * FROM {cls.TABLE}
+                     WHERE status='pending' AND next_run_at<=NOW() AND retry < max_retry_count
+                     ORDER BY next_run_at LIMIT %s"""
+            return mysql_pool.select(sql, (limit,))
 
     @classmethod
     def mark_running(cls, task_id: int, device_id: Optional[str] = None):
@@ -92,6 +98,34 @@ class TaskDAO:
     @classmethod
     def mark_done(cls, task_id: int):
         mysql_pool.execute(f"UPDATE {cls.TABLE} SET status='done', updated_at=NOW() WHERE id=%s", (task_id,))
+
+    @classmethod
+    def mark_done_batch(cls, task_ids: List[int]) -> int:
+        """批量标记任务为完成，返回受影响行数"""
+        if not task_ids:
+            return 0
+        try:
+            placeholders = ','.join(['%s'] * len(task_ids))
+            sql = f"UPDATE {cls.TABLE} SET status='done', updated_at=NOW() WHERE id IN ({placeholders})"
+            affected = mysql_pool.execute(sql, tuple(task_ids))
+            return affected
+        except Exception as e:
+            logger.exception(f"Failed to mark done batch: ids={task_ids}, error={e}")
+            return 0
+
+    @classmethod
+    def mark_retry_batch(cls, task_ids: List[int]) -> int:
+        """批量增加重试次数（仅限制 pending 状态）"""
+        if not task_ids:
+            return 0
+        try:
+            placeholders = ','.join(['%s'] * len(task_ids))
+            sql = f"UPDATE {cls.TABLE} SET retry=retry+1, updated_at=NOW() WHERE id IN ({placeholders}) AND status='pending'"
+            affected = mysql_pool.execute(sql, tuple(task_ids))
+            return affected
+        except Exception as e:
+            logger.exception(f"Failed to mark retry batch: ids={task_ids}, error={e}")
+            return 0
 
     @classmethod
     def fail_task(cls, task_id: int, retry_delay_sec: int):

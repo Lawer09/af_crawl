@@ -13,6 +13,7 @@ from model.user import UserDAO, UserProxyDAO
 
 logger = logging.getLogger(__name__)
 
+
 def get_session(username: str, password: str, proxies: dict | None = None, browser_context_args: dict = {}) -> Session:
     """返回 session 可直接传给 requests"""
     # 1. 拿到代理（绑定用户名）
@@ -36,6 +37,13 @@ def get_session(username: str, password: str, proxies: dict | None = None, brows
             waf_token = None
         if waf_token:
             sess.headers["X-XSRF-TOKEN"] = waf_token
+
+        # 将代理信息注入请求头，便于刷新时复用（不影响服务端逻辑）
+        if proxies:
+            # 统一以一个 URL 表示，刷新时两端统一
+            purl = proxies.get("http") or proxies.get("https")
+            if purl:
+                sess.headers["X-Proxy-URL"] = purl
     except Exception:
         logger.debug("prepare session headers failed", exc_info=True)
 
