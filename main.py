@@ -104,7 +104,7 @@ if __name__ == "__main__":
         from tasks.sync_user_apps import run as sync_apps_run
         logger.info("=== sync_apps start ===")
         sync_apps_run()
-        
+
     elif args.command == "sync_apps_cron":
         from schedulers.app_jobs import run_update_apps_cron
         run_update_apps_cron(interval_minutes=args.interval_minutes)
@@ -147,23 +147,22 @@ if __name__ == "__main__":
             sys.exit(1)
 
     elif args.command == "cron":
-        from schedulers.app_jobs import start_update_apps_scheduler, start_update_data_scheduler
-        import time
+        from schedulers.app_jobs import start_update_apps_scheduler, run_data
         started = False
         if args.apps:
             start_update_apps_scheduler(interval_minutes=args.apps_interval_minutes)
             started = True
         if args.data:
-            start_update_data_scheduler(interval_hours=args.data_interval_hours)
+            run_data()
             started = True
         if not started:
             logger.error("请至少选择一个定时任务，例如: --apps 或 --data")
             sys.exit(1)
-        try:
-            while True:
-                time.sleep(60)
-        except KeyboardInterrupt:
-            logger.info("cron stopped by user")
+        # try:
+        #     while True:
+        #         time.sleep(60)
+        # except KeyboardInterrupt:
+        #     logger.info("cron stopped by user")
     else:
         logger.error("unknown command: %s", args.command)
         sys.exit(1)
