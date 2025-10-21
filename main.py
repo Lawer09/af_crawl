@@ -166,6 +166,7 @@ if __name__ == "__main__":
         #         time.sleep(60)
         # except KeyboardInterrupt:
         #     logger.info("cron stopped by user")
+    
     elif args.command == "task_manager":
         from tasks.task_manager import run as task_manager_run
         logger.info("=== task_manager start ===")

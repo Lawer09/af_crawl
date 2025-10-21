@@ -169,13 +169,6 @@ if [ "$CMD" = "--help" ] || [ "$CMD" = "-h" ]; then
     exit 0
 fi
 
-# 验证命令
-if ! validate_command "$CMD" "$SUBCMD"; then
-    echo ""
-    echo "使用 $0 --help 查看完整帮助信息"
-    exit 1
-fi
-
 # 主逻辑（支持后台运行）
 main() {
     local cmd="$CMD"
