@@ -100,6 +100,12 @@ def create_task(date:str) -> None:
     TaskDAO.add_tasks(task_list)
 
 
+def create_now_task():
+    now_date = datetime.now().strftime("%Y-%m-%d")
+    logger.info(f"create task for date={now_date}")
+    create_task(now_date)
+
+
 def handle(tasks:dict):
     """执行任务"""
 

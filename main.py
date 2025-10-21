@@ -79,6 +79,9 @@ def _parse_args():
     p_status.add_argument("--master-host", default="localhost", help="主节点地址")
     p_status.add_argument("--master-port", type=int, default=7989, help="主节点端口")
 
+    sub.add_parser("task_manager", help="本地任务处理（非分布式）")
+    sub.add_parser("create_today_tasks", help="创建今日的应用数据任务")
+
     return parser.parse_args()
 
 
@@ -163,6 +166,14 @@ if __name__ == "__main__":
         #         time.sleep(60)
         # except KeyboardInterrupt:
         #     logger.info("cron stopped by user")
+    elif args.command == "task_manager":
+        from tasks.task_manager import run as task_manager_run
+        logger.info("=== task_manager start ===")
+        task_manager_run()
+    elif args.command == "create_today_tasks":
+        from tasks.sync_af_data import create_now_task
+        logger.info("=== create_today_tasks start ===")
+        create_now_task()
     else:
         logger.error("unknown command: %s", args.command)
         sys.exit(1)
