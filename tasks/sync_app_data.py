@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple, Any, Optional
 
 from model.user import UserDAO
 from model.user_app import UserAppDAO
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from services.data_service import fetch_and_save_table_data
 from model.af_data import AfDataDAO
 from core.db import mysql_pool
@@ -189,8 +189,8 @@ def _sync_user_apps(user_data: Dict) -> None:
     tasks = user_data['tasks']
     
     logger.info("开始处理用户: %s, 任务数: %d", username, len(tasks))
-    total_tasks = CrawlTaskDAO.get_user_total_tasks(username, 'app_data')
-    completed_tasks = CrawlTaskDAO.get_user_completed_tasks(username, 'app_data')
+    total_tasks = TaskDAO.get_user_total_tasks(username, 'app_data')
+    completed_tasks = TaskDAO.get_user_completed_tasks(username, 'app_data')
     logger.info("用户 %s 总任务数: %d, 已完成: %d", username, total_tasks, completed_tasks)
     
     for task in tasks:
@@ -212,13 +212,13 @@ def _sync_user_apps(user_data: Dict) -> None:
             )
             logger.info("用户 %s 同步成功 -> %s [%s,%s] rows=%d", 
                        username, app_id, start_date, end_date, len(rows))
-            CrawlTaskDAO.mark_done(task_id)
+            TaskDAO.mark_done(task_id)
             
         except Exception as e:
             logger.exception("用户 %s 同步失败 -> %s : %s", username, app_id, e)
             # 延迟任务
             delay = 300 + random.randint(180, 360)
-            CrawlTaskDAO.fail_task(task_id, delay)
+            TaskDAO.fail_task(task_id, delay)
         
         # 同一用户的任务间延迟
         if len(tasks) > 1:
@@ -292,7 +292,7 @@ def run(days: int = 1):
         return
 
     """多线程用户任务分配 - 按线程数均衡分配用户任务"""
-    CrawlTaskDAO.init_table()
+    TaskDAO.init_table()
 
     # 获取所有启用用户
     users = UserDAO.get_enabled_users()
@@ -306,7 +306,7 @@ def run(days: int = 1):
     logger.info("总启用用户数: %d", len(all_usernames))
 
     # 初始化任务（如果需要）
-    if not CrawlTaskDAO.fetch_pending('app_data', 1):
+    if not TaskDAO.fetch_pending('app_data', 1):
         logger.info("初始化所有用户任务...")
         init_tasks = []
 
@@ -324,7 +324,7 @@ def run(days: int = 1):
                 })
         
         if init_tasks:
-            CrawlTaskDAO.add_tasks(init_tasks)
+            TaskDAO.add_tasks(init_tasks)
             logger.info("已初始化任务数: %d", len(init_tasks))
 
     # 获取线程池配置
@@ -339,7 +339,7 @@ def run(days: int = 1):
                 if not username:
                     continue
                 # 获取该用户的待处理任务
-                user_tasks = CrawlTaskDAO.fetch_user_pending_tasks(username, 'app_data', limit=50)
+                user_tasks = TaskDAO.fetch_user_pending_tasks(username, 'app_data', limit=50)
                 if not user_tasks:
                     logger.info("用户 %s 没有待处理任务", username)
                     continue
@@ -367,7 +367,7 @@ def run(days: int = 1):
             finally:
                 username_queue.task_done()
 
-    while CrawlTaskDAO.fetch_pending('app_data', 1):
+    while TaskDAO.fetch_pending('app_data', 1):
         # 创建用户队列
         import queue
         username_queue = queue.Queue()

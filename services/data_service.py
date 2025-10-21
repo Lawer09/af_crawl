@@ -5,12 +5,12 @@ import random
 from datetime import datetime, timedelta
 import config.af_config as cfg
 from services.fs_service import send_message
-from services.login_service import get_session, get_session_by_pid
+from services.login_service import get_session_by_pid
 from model.user_app_data import UserAppDataDAO
 from model.af_data import AfAppDataDAO
 from model.overall_report_count import OverallReportCountDAO
 from model.offer import OfferDAO
-from model.aff import AffDAO
+from model.aff import OfferAffDAO, AffDAO
 from model.user import UserProxyDAO
 from utils.retry import request_with_retry
 from core.db import mysql_pool
@@ -110,6 +110,25 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str | None = None, end_date:
     return rows
 
 
+def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[Dict]:
+    """获取最新数据并保存"""
+    try:
+        rows = fetch_by_pid(pid, app_id, date, date, aff_id)
+        af_rows = []
+        for row in rows:
+            row['pid'] = pid
+            af_row = row.copy()
+            af_row['date'] = date
+            af_rows.append(af_row)
+        UserAppDataDAO.save_data_bulk(rows)
+        # 只插入af数据中开始日期和结束日期相同的数据
+        AfAppDataDAO.upsert_bulk_safe(af_rows)
+    except Exception as e:
+        logger.error(f"Failed to fetch and save data for pid={pid} app_id={app_id} aff_id={aff_id} date={date}: {e}")
+        return []
+    return rows
+
+
 def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
     """按日期动态缓存策略：
 
@@ -135,18 +154,7 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
         cached_prev = UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id)
         if cached_prev:
             return cached_prev
-        rows = fetch_by_pid(pid, app_id, start_date, end_date, aff_id)
-        af_rows = []
-        for row in rows:
-            row['pid'] = pid
-            if int(row['days']) == 1:
-                af_row = row.copy()
-                af_row['date'] = start_date
-                af_rows.append(af_row)
-        UserAppDataDAO.save_data_bulk(rows)
-        # 只插入af数据中开始日期和结束日期相同的数据
-        AfAppDataDAO.upsert_bulk_safe(af_rows)
-        return rows
+        return fetch_and_save_data(pid, app_id, aff_id, start_date)
 
     # 昨天：扩大缓存窗口到 4 小时
     if days_diff == 1:
@@ -158,22 +166,7 @@ def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str,
         return cached
 
     # 2. 无缓存则实时查询
-    rows = fetch_by_pid(pid, app_id, start_date, end_date, aff_id)
-
-    af_rows = []
-    for row in rows:
-        row['pid'] = pid
-        if int(row['days']) == 1:
-            af_row = row.copy()
-            af_row['date'] = start_date
-            af_rows.append(af_row)
-
-    # 3. 落库
-    UserAppDataDAO.save_data_bulk(rows)
-    # 只插入af数据中开始日期和结束日期相同的数据
-    
-    AfAppDataDAO.upsert_bulk_safe(af_rows)
-    return rows
+    return fetch_and_save_data(pid, app_id, aff_id, start_date)
 
 
 def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str | None = None, start_date: str = None, end_date: str = None, aff_id: str | None = None):
@@ -250,7 +243,9 @@ def get_daily_data_ret_message(pids: List[str], date:str) -> str:
 
 def update_daily_data():
     """
+    同步方法，存在的问题是对于失败查询无法重启，优点是实现简洁
     每天更新一次数据：遍历所有启用的 pid 用户，按目前系统启动的offer中的app列表更新昨天数据。
+    仅更新内部非虚拟DDJ渠道的客户数据。
     """
     target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
@@ -276,6 +271,7 @@ def update_daily_data():
 
     total_apps = 0
     total_success = 0
+
     for pid in pids:
         # 获取该用户的应用列表
         offers = pid_offer_map.get(pid)
@@ -287,12 +283,20 @@ def update_daily_data():
         pid_success = 0
 
         app_aff_map = get_app_aff_map_from_offers(offers)
+
         app_count = len(app_aff_map.keys())
         app_index = 0
         for app_id, aff_ids in app_aff_map.items():
+            
+            aff_map = AffDAO.get_ddj_list_by_aff_ids_map_aff_id(aff_ids)
+
             app_index += 1
             logger.info(f"{app_index}/{app_count} Daily update pid=%s app_id=%s", pid, app_id)
             for aff_id in aff_ids:
+                aff = aff_map.get(int(aff_id))
+                if not aff:
+                    continue
+
                 time.sleep(random.uniform(3.5, 6.5))
                 try:
                     logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, aff_id={aff_id}")
@@ -481,7 +485,7 @@ def get_app_aff_map_from_offers(offers: List[Dict]) -> Dict[str, List[str]]:
     # 一次性查询所有 offer_id 对应的 aff 列表
     all_offer_ids = [oid for oids in app_offer_ids.values() for oid in oids]
     try:
-        offer_id_aff_map = AffDAO.get_list_by_offer_ids_group(all_offer_ids)
+        offer_id_aff_map = OfferAffDAO.get_list_by_offer_ids_group(all_offer_ids)
     except Exception as e:
         logger.exception("get_app_aff_map_from_offers: query aff by offers failed: %s", e)
         offer_id_aff_map = {}

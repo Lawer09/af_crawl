@@ -22,7 +22,7 @@ from typing import Dict, List, Optional
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.user import UserDAO
 from model.user_app import UserAppDAO
 from scripts.init_tasks import TaskInitializer
@@ -187,7 +187,7 @@ class TaskManager:
             confirm = input("⚠️  确认重置所有任务? 这将删除所有任务数据! (yes/N): ").strip()
             if confirm == 'yes':
                 print("\n⏳ 正在重置所有任务...")
-                CrawlTaskDAO.reset_all()
+                TaskDAO.reset_all()
                 print("✅ 所有任务已重置")
             else:
                 print("❌ 操作已取消")
@@ -246,7 +246,7 @@ class TaskManager:
             from core.db import mysql_pool
             sql = f"""
             SELECT id, task_type, username, app_id, assigned_device_id, assigned_at
-            FROM {CrawlTaskDAO.TABLE}
+            FROM {TaskDAO.TABLE}
             WHERE status = 'running'
             ORDER BY assigned_at DESC
             LIMIT 20
@@ -273,7 +273,7 @@ class TaskManager:
             from core.db import mysql_pool
             sql = f"""
             SELECT id, task_type, username, app_id, retry, updated_at
-            FROM {CrawlTaskDAO.TABLE}
+            FROM {TaskDAO.TABLE}
             WHERE status = 'failed'
             ORDER BY updated_at DESC
             LIMIT 20
@@ -297,7 +297,7 @@ class TaskManager:
     def show_timeout_tasks(self):
         """显示超时任务"""
         try:
-            timeout_tasks = CrawlTaskDAO.get_timeout_tasks(timeout_minutes=120)  # 2小时超时
+            timeout_tasks = TaskDAO.get_timeout_tasks(timeout_minutes=120)  # 2小时超时
             
             print("\n⏰ 超时的任务")
             print("-" * 80)
@@ -377,7 +377,7 @@ class TaskManager:
                 tasks.append(task)
             
             if tasks:
-                CrawlTaskDAO.add_tasks(tasks)
+                TaskDAO.add_tasks(tasks)
                 print(f"✅ 成功创建 {len(tasks)} 个用户应用任务")
             
         except Exception as e:
@@ -404,7 +404,7 @@ class TaskManager:
                     tasks.append(task)
             
             if tasks:
-                CrawlTaskDAO.add_tasks(tasks)
+                TaskDAO.add_tasks(tasks)
                 print(f"✅ 成功创建 {len(tasks)} 个应用数据任务")
             
         except Exception as e:
@@ -415,7 +415,7 @@ class TaskManager:
         try:
             from core.db import mysql_pool
             sql = f"""
-            UPDATE {CrawlTaskDAO.TABLE} 
+            UPDATE {TaskDAO.TABLE} 
             SET status='pending', retry=0, assigned_device_id=NULL, assigned_at=NULL, 
                 next_run_at=NOW(), updated_at=NOW()
             WHERE username=%s AND status IN ('failed', 'running', 'assigned')
@@ -430,7 +430,7 @@ class TaskManager:
         """批量删除指定类型任务"""
         try:
             from core.db import mysql_pool
-            sql = f"DELETE FROM {CrawlTaskDAO.TABLE} WHERE task_type=%s"
+            sql = f"DELETE FROM {TaskDAO.TABLE} WHERE task_type=%s"
             result = mysql_pool.execute(sql, (task_type,))
             print(f"✅ 成功删除 {result} 个 {task_type} 类型的任务")
             
@@ -497,7 +497,7 @@ class TaskManager:
         """显示任务详情"""
         try:
             from core.db import mysql_pool
-            sql = f"SELECT * FROM {CrawlTaskDAO.TABLE} WHERE id=%s"
+            sql = f"SELECT * FROM {TaskDAO.TABLE} WHERE id=%s"
             tasks = mysql_pool.select(sql, (task_id,))
             
             if tasks:
@@ -524,7 +524,7 @@ class TaskManager:
     def update_task_priority(self, task_id: int, priority: int):
         """更新任务优先级"""
         try:
-            success = CrawlTaskDAO.update_task_priority(task_id, priority)
+            success = TaskDAO.update_task_priority(task_id, priority)
             if success:
                 print(f"✅ 任务 {task_id} 的优先级已更新为 {priority}")
             else:
@@ -552,7 +552,7 @@ class TaskManager:
             print(f"数据库连接: ✅ 正常")
             
             # 任务表状态
-            sql = f"SHOW TABLE STATUS LIKE '{CrawlTaskDAO.TABLE}'"
+            sql = f"SHOW TABLE STATUS LIKE '{TaskDAO.TABLE}'"
             table_info = mysql_pool.select(sql)
             if table_info:
                 info = table_info[0]

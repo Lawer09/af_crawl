@@ -113,8 +113,8 @@ if __name__ == "__main__":
         logger.info("=== sync_data start days=%d ===", args.days)
         sync_data_run(days=args.days)
     elif args.command == "sync_data_cron":
-        from schedulers.app_jobs import run_update_data_cron
-        run_update_data_cron(interval_hours=args.interval_hours)
+        from schedulers.app_jobs import run_data
+        run_data()
     
     elif args.command == "web":
         from web_app import app

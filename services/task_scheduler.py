@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Callable
 from datetime import datetime, timedelta
 from enum import Enum
 
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.device import DeviceDAO
 from model.task_assignment import TaskAssignmentDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
@@ -141,7 +141,7 @@ class TaskScheduler:
                 return
             
             # 获取分配的任务
-            assigned_tasks = CrawlTaskDAO.get_device_tasks(device_id)
+            assigned_tasks = TaskDAO.get_device_tasks(device_id)
             logger.info(f"Worker {device_id} has {len(assigned_tasks)} tasks in assigned and running status")
 
             # 执行任务
@@ -157,11 +157,11 @@ class TaskScheduler:
         """独立模式调度逻辑"""
         try:
             # 独立模式下，直接获取待执行任务并执行
-            pending_tasks = CrawlTaskDAO.get_assignable_tasks(limit=self.max_tasks_per_device)
+            pending_tasks = TaskDAO.get_assignable_tasks(limit=self.max_tasks_per_device)
             
             for task in pending_tasks:
                 # 标记任务为运行中
-                CrawlTaskDAO.mark_running(task['id'])
+                TaskDAO.mark_running(task['id'])
                 
                 # 执行任务
                 self._execute_task(task)
@@ -179,12 +179,12 @@ class TaskScheduler:
             
             # 更新任务状态为运行中
             if device_id:
-                CrawlTaskDAO.mark_running(task_id, device_id)
+                TaskDAO.mark_running(task_id, device_id)
                 TaskAssignmentDAO.update_status_by_task_device(
                     task_id, device_id, 'running'
                 )
             else:
-                CrawlTaskDAO.mark_running(task_id)
+                TaskDAO.mark_running(task_id)
             
             # 获取任务执行器
             executor = self.task_executors.get(task_type)
@@ -197,7 +197,7 @@ class TaskScheduler:
             execution_time = time.time() - start_time
             
             # 标记任务完成
-            CrawlTaskDAO.mark_done(task_id)
+            TaskDAO.mark_done(task_id)
             
             if device_id:
                 TaskAssignmentDAO.update_status_by_task_device(
@@ -216,7 +216,7 @@ class TaskScheduler:
             
             # 标记任务失败
             retry_delay = self._calculate_retry_delay(task.get('retry', 0))
-            CrawlTaskDAO.fail_task(task_id, retry_delay)
+            TaskDAO.fail_task(task_id, retry_delay)
             
             if device_id:
                 TaskAssignmentDAO.update_status_by_task_device(
@@ -246,7 +246,7 @@ class TaskScheduler:
             # 计算平均负载
             total_tasks = 0
             for device in online_devices:
-                device_tasks = CrawlTaskDAO.get_device_tasks(device['device_id'])
+                device_tasks = TaskDAO.get_device_tasks(device['device_id'])
                 total_tasks += len(device_tasks)
             
             avg_load = total_tasks / len(online_devices) if online_devices else 0
@@ -270,7 +270,7 @@ class TaskScheduler:
         """处理优先级任务"""
         try:
             # 获取高优先级任务
-            high_priority_tasks = CrawlTaskDAO.get_assignable_tasks(limit=50)
+            high_priority_tasks = TaskDAO.get_assignable_tasks(limit=50)
             high_priority_tasks = [t for t in high_priority_tasks if t.get('priority', 0) > 5]
             
             if not high_priority_tasks:
@@ -287,7 +287,7 @@ class TaskScheduler:
                 min_tasks = float('inf')
                 
                 for device in available_devices:
-                    device_tasks = CrawlTaskDAO.get_device_tasks(device['device_id'])
+                    device_tasks = TaskDAO.get_device_tasks(device['device_id'])
                     if len(device_tasks) < min_tasks and len(device_tasks) < self.max_tasks_per_device:
                         min_tasks = len(device_tasks)
                         best_device = device
@@ -305,7 +305,7 @@ class TaskScheduler:
         """监控任务执行情况"""
         try:
             # 获取超时任务
-            timeout_tasks = CrawlTaskDAO.get_timeout_tasks(timeout_minutes=60)
+            timeout_tasks = TaskDAO.get_timeout_tasks(timeout_minutes=60)
             
             for task in timeout_tasks:
                 logger.warning(f"Task {task['id']} has been running for too long")
@@ -348,7 +348,7 @@ class TaskScheduler:
             }
             
             # 添加任务统计
-            task_stats = CrawlTaskDAO.get_task_stats()
+            task_stats = TaskDAO.get_task_stats()
             stats['task_stats'] = task_stats
             
             # 添加设备统计
@@ -384,7 +384,7 @@ class TaskScheduler:
                 'next_run_at': datetime.now()
             }
             
-            CrawlTaskDAO.add_tasks([task])
+            TaskDAO.add_tasks([task])
             logger.info(f"Task added: {task_type} for {username}")
             return True
             
@@ -420,11 +420,11 @@ class TaskScheduler:
         """获取任务队列状态"""
         try:
             # 按任务类型统计
-            task_stats = CrawlTaskDAO.get_task_stats()
+            task_stats = TaskDAO.get_task_stats()
             
             # 按优先级统计
             priority_stats = {}
-            all_tasks = CrawlTaskDAO.get_assignable_tasks(limit=1000)
+            all_tasks = TaskDAO.get_assignable_tasks(limit=1000)
             for task in all_tasks:
                 priority = task.get('priority', 0)
                 if priority not in priority_stats:

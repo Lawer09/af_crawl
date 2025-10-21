@@ -2,26 +2,20 @@ from __future__ import annotations
 
 import logging
 from typing import List, Dict, Optional
-from datetime import datetime
 
 from core.db import mysql_pool
 
 logger = logging.getLogger(__name__)
 
 
-class CrawlTaskDAO:
-    """任务表: 记录爬虫执行进度，支持失败延迟、重启续跑"""
+class TaskDAO:
+    """任务表: 支持失败延迟、重启续跑"""
 
-    TABLE = "cl_crawl_tasks"
+    TABLE = "cl_task"
 
     CREATE_SQL = f"""
     CREATE TABLE IF NOT EXISTS {TABLE} (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        task_type VARCHAR(32) NOT NULL,
-        username VARCHAR(255) NOT NULL,
-        app_id VARCHAR(128) DEFAULT NULL,
-        start_date DATE DEFAULT NULL,
-        end_date DATE DEFAULT NULL,
         retry INT DEFAULT 0,
         status ENUM('pending','running','failed','done','assigned') DEFAULT 'pending',
         next_run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -29,40 +23,41 @@ class CrawlTaskDAO:
         assigned_at DATETIME DEFAULT NULL COMMENT '分配时间',
         priority INT DEFAULT 0 COMMENT '任务优先级',
         task_data JSON DEFAULT NULL COMMENT '任务数据',
-        execution_timeout INT DEFAULT 3600 COMMENT '执行超时时间(秒)',
         max_retry_count INT DEFAULT 3 COMMENT '最大重试次数',
+        execution_timeout INT DEFAULT 3600 COMMENT '任务执行超时时间（秒）',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_status_next (status, next_run_at),
         KEY idx_assigned_device (assigned_device_id),
-        KEY idx_priority (priority),
-        KEY idx_task_type_status (task_type, status)
+        KEY idx_priority (priority)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
     @classmethod
     def init_table(cls):
         mysql_pool.execute(cls.CREATE_SQL)
+        logger.info(f"Table {cls.TABLE} initialized.")
 
-    # ---------- CURD ----------
+    
     @classmethod
     def add_tasks(cls, tasks: List[Dict]):
         if not tasks:
             return
+
         sql = f"""
         INSERT INTO {cls.TABLE}
-            (task_type, username, app_id, start_date, end_date, next_run_at, priority, task_data, execution_timeout, max_retry_count)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON DUPLICATE KEY UPDATE status='pending', priority=VALUES(priority)
+            (task_data, next_run_at, priority, execution_timeout, max_retry_count)
+        VALUES (%s,%s,%s,%s,%s)
         """
+
         import json
         params = [(
-            t['task_type'], t['username'], t.get('app_id'), t.get('start_date'), t.get('end_date'), 
-            t.get('next_run_at'), t.get('priority', 0), 
             json.dumps(t.get('task_data')) if t.get('task_data') else None,
+            t.get('next_run_at'), t.get('priority', 0), 
             t.get('execution_timeout', 3600), t.get('max_retry_count', 3)
         ) for t in tasks]
         mysql_pool.executemany(sql, params)
+
 
     @classmethod
     def get_existing_tasks(cls, username: str, app_id: str, task_type: str) -> set:
@@ -75,7 +70,10 @@ class CrawlTaskDAO:
         return {row['task_key'] for row in results}
 
     @classmethod
-    def fetch_pending(cls, task_type: str, limit: int = 100) -> List[Dict]:
+    def get_all_pending_task(cls, task_type: str, limit: int = 1000) -> List[Dict]:
+        """
+        获取待执行的任务列表
+        """
         sql = f"""SELECT * FROM {cls.TABLE}
                  WHERE task_type=%s AND status='pending' AND next_run_at<=NOW()
                  ORDER BY next_run_at LIMIT %s"""

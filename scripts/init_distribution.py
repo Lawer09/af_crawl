@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 from model.device import DeviceDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from config.distribution_config import DistributionConfig, DistributionMode
 from core.logger import setup_logging
 
@@ -41,7 +41,7 @@ def init_database_tables():
         
         # 确保爬虫任务表已初始化并包含分布式字段
         logger.info("Initializing crawl task table...")
-        CrawlTaskDAO.init_table()
+        TaskDAO.init_table()
         
         logger.info("All database tables initialized successfully")
         
@@ -130,7 +130,7 @@ def verify_installation():
             DeviceDAO.TABLE,
             TaskAssignmentDAO.TABLE, 
             DeviceHeartbeatDAO.TABLE,
-            CrawlTaskDAO.TABLE
+            TaskDAO.TABLE
         ]
         
         with mysql_pool.get_conn() as conn:

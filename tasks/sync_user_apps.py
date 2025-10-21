@@ -13,7 +13,7 @@ from model.user import UserDAO
 from services.app_service import fetch_and_save_apps
 from config.settings import CRAWLER
 from core.logger import setup_logging  # noqa: F401  # 触发日志初始化
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 
 logger = logging.getLogger(__name__)
 
@@ -71,26 +71,26 @@ def _worker(params):
     try:
         apps = fetch_and_save_apps(user)
         logger.info("sync apps ok -> %s , count=%d", user["email"], len(apps))
-        CrawlTaskDAO.mark_done(task_id)
+        TaskDAO.mark_done(task_id)
     except Exception as e:
         logger.exception("sync apps fail -> %s : %s", user["email"], e)
         delay = 300 + random.randint(180, 360)
-        CrawlTaskDAO.fail_task(task_id, delay)
+        TaskDAO.fail_task(task_id, delay)
 
 
 def run():
-    CrawlTaskDAO.init_table()
+    TaskDAO.init_table()
     
-    if not CrawlTaskDAO.fetch_pending('user_apps', 1):
+    if not TaskDAO.fetch_pending('user_apps', 1):
         users = UserDAO.get_enabled_users()
         init_tasks = [{
             'task_type': 'user_apps',
             'username': u['email'],
             'next_run_at': date.today().isoformat(),
         } for u in users]
-        CrawlTaskDAO.add_tasks(init_tasks)
+        TaskDAO.add_tasks(init_tasks)
 
-    pending = CrawlTaskDAO.fetch_pending('user_apps', limit=500)
+    pending = TaskDAO.fetch_pending('user_apps', limit=500)
     logger.info("pending user_apps=%d", len(pending))
 
     usernames = [t['username'] for t in pending]

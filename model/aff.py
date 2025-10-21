@@ -9,6 +9,77 @@ logger = logging.getLogger(__name__)
 
 
 class AffDAO:
+    """
+    _tb_customer 表操作封装。
+    字段：id、name、live、own、tag
+    """
+
+    TABLE = "_tb_customer"
+
+    @classmethod
+    def get_ddj_list_by_aff_ids(cls, aff_ids: List[int]) -> List[Dict]:
+        """批量按 aff_id（即 customer）查询 live=1 的客户列表。
+        内部非虚拟DDJ渠道： own > 1 AND tag = '1'
+        
+        返回字段：id, name, live, own, tag
+        """
+        if not aff_ids:
+            return []
+
+        placeholders = ",".join(["%s"] * len(aff_ids))
+        sql = (
+            f"SELECT id, name, live, own, tag "
+            f"FROM {cls.TABLE} WHERE live = 1 AND own > 1 AND tag = '1' "
+            f"AND id IN ({placeholders})"
+        )
+        try:
+            return mysql_pool.select(sql, tuple(aff_ids))
+        except Exception as e:
+            logger.error("Error fetching affs by aff_ids=%s: %s", aff_ids, e)
+            return []
+
+    @classmethod
+    def get_ddj_list(cls) -> List[Dict]:
+        """查询内部非虚拟 DDJ 渠道（live=1 AND own>1 AND tag='1'）。"""
+        sql = (
+            f"SELECT id, name, live, own, tag "
+            f"FROM {cls.TABLE} WHERE live = 1 AND own > 1 AND tag = '1'"
+        )
+        try:
+            return mysql_pool.select(sql)
+        except Exception as e:
+            logger.error("Error fetching all ddj affs: %s", e)
+            return []
+
+    @classmethod
+    def get_ddj_map_aff_id(cls) -> Dict[int, Dict]:
+        """返回所有客户（live=1）的映射：aff_id -> aff。"""
+        affs = cls.get_ddj_list()
+        return {aff.get("id"): aff for aff in affs}
+
+    @classmethod
+    def get_ddj_list_by_aff_ids_map_aff_id(cls, aff_ids: List[int]) -> Dict[int, Dict]:
+        """按 aff_id 分组返回客户列表（支持大列表分批查询）。"""
+        grouped: Dict[int, Dict] = {}
+        if not aff_ids:
+            return grouped
+        CHUNK = 500
+        for i in range(0, len(aff_ids), CHUNK):
+            chunk = aff_ids[i:i+CHUNK]
+            rows = cls.get_ddj_list_by_aff_ids(chunk)
+            for r in rows:
+                key = r.get("id")
+                if key is None:
+                    continue
+                if isinstance(key, str) and key.isdigit():
+                    key_int = int(key)
+                else:
+                    key_int = key
+                grouped[key_int] = r
+        return grouped
+
+
+class OfferAffDAO:
     """_tb_relation 表操作封装。
 
     字段：id、campaign、customer、live
@@ -33,7 +104,7 @@ class AffDAO:
             f"FROM {cls.TABLE} WHERE live = 1 AND campaign IN ({placeholders})"
         )
         try:
-            return mysql_pool.select(sql, tuple(offer_ids))
+            return mysql_pool.select(sql, tuple[int, ...](offer_ids))
         except Exception as e:
             logger.error("Error fetching aff relations by offer_ids=%s: %s", offer_ids, e)
             return []

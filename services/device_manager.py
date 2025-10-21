@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from model.device import DeviceDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ class DeviceManager:
             system_info = self._get_system_status()
             
             # 获取当前运行的任务数
-            running_tasks = len(CrawlTaskDAO.get_device_tasks(self.device_id))
+            running_tasks = len(TaskDAO.get_device_tasks(self.device_id))
             
             # 记录心跳
             success = DeviceHeartbeatDAO.record_heartbeat(
@@ -281,7 +281,7 @@ class DeviceManager:
                 DeviceDAO.update_status(device_id, 'offline')
                 
                 # 释放设备的任务
-                released_count = CrawlTaskDAO.release_device_tasks(device_id)
+                released_count = TaskDAO.release_device_tasks(device_id)
                 if released_count > 0:
                     logger.info(f"Released {released_count} tasks from offline device {device_id}")
                 
@@ -326,7 +326,7 @@ class DeviceManager:
             latest_heartbeat = DeviceHeartbeatDAO.get_latest_heartbeat(self.device_id)
             
             # 获取设备任务
-            device_tasks = CrawlTaskDAO.get_device_tasks(self.device_id)
+            device_tasks = TaskDAO.get_device_tasks(self.device_id)
             
             # 获取健康统计
             health_stats = DeviceHeartbeatDAO.get_device_health_stats(self.device_id)

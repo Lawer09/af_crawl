@@ -332,13 +332,13 @@ class DistributedTaskExecutor:
     
     async def _local_task_loop(self):
         """独立模式本地任务处理循环"""
-        from model.crawl_task import CrawlTaskDAO
+        from model.task import TaskDAO
         
         while True:
             try:
                 if self.can_accept_task():
                     # 获取待处理任务
-                    pending_tasks = CrawlTaskDAO.fetch_pending(limit=1)
+                    pending_tasks = TaskDAO.fetch_pending(limit=1)
                     
                     for task in pending_tasks:
                         task_id = task['id']
@@ -351,7 +351,7 @@ class DistributedTaskExecutor:
                         }
                         
                         # 标记任务为运行中
-                        CrawlTaskDAO.mark_running(task_id)
+                        TaskDAO.mark_running(task_id)
                         
                         # 异步执行任务
                         future = self.execute_task_async(task_id, task_type, task_data)
@@ -368,7 +368,7 @@ class DistributedTaskExecutor:
     
     async def _handle_local_task_completion(self, task_id: int, future: Future):
         """处理本地任务完成"""
-        from model.crawl_task import CrawlTaskDAO
+        from model.task import TaskDAO
         
         try:
             # 等待任务完成
@@ -376,17 +376,17 @@ class DistributedTaskExecutor:
             
             # 更新任务状态
             if result.get("status") == "success":
-                CrawlTaskDAO.mark_done(task_id)
+                TaskDAO.mark_done(task_id)
             else:
                 # 任务失败，设置重试
-                CrawlTaskDAO.fail_task(task_id, retry_delay=300)  # 5分钟后重试
+                TaskDAO.fail_task(task_id, retry_delay=300)  # 5分钟后重试
                 
         except Exception as e:
             logger.exception(f"Error handling local task completion for task {task_id}: {e}")
             
             # 标记任务失败
             try:
-                CrawlTaskDAO.fail_task(task_id, retry_delay=300)
+                TaskDAO.fail_task(task_id, retry_delay=300)
             except Exception:
                 pass
     

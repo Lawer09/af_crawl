@@ -37,7 +37,7 @@ def run_update_apps_cron(interval_minutes: int = 60):
 
 
 def start_update_data_scheduler(interval_hours: int = 24):
-    """启动后台定时任务，每 interval_hours 小时更新一次数据（昨天的）。"""
+    """启动后台定时任务。"""
     def _runner():
         try:
             update_daily_data()
@@ -59,3 +59,10 @@ def run_update_data_cron(interval_hours: int = 24):
             time.sleep(60)
     except KeyboardInterrupt:
         logger.info("sync_data_cron stopped by user")
+
+def run_data():
+    """运行一次"""
+    try:
+        update_daily_data()
+    except Exception:
+        logger.exception("update_daily_data scheduled run failed")

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
 
 from model.device import DeviceDAO
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
@@ -214,7 +214,7 @@ async def get_device(device_id: str):
         latest_heartbeat = DeviceHeartbeatDAO.get_latest_heartbeat(device_id)
         
         # 获取设备任务
-        device_tasks = CrawlTaskDAO.get_device_tasks(device_id)
+        device_tasks = TaskDAO.get_device_tasks(device_id)
         
         # 获取设备统计
         assignment_stats = TaskAssignmentDAO.get_device_assignment_stats(device_id)
@@ -303,7 +303,7 @@ async def create_task(task: TaskRequest):
             'next_run_at': datetime.now()
         }
         
-        CrawlTaskDAO.add_tasks([task_data])
+        TaskDAO.add_tasks([task_data])
         
         return {"status": "success", "message": "Task created successfully"}
         
@@ -320,14 +320,14 @@ async def get_tasks(status: Optional[str] = Query(None),
     """获取任务列表"""
     try:
         if device_id:
-            tasks = CrawlTaskDAO.get_device_tasks(device_id)
+            tasks = TaskDAO.get_device_tasks(device_id)
         elif task_type:
             if status == 'pending':
-                tasks = CrawlTaskDAO.get_assignable_tasks(task_type, limit)
+                tasks = TaskDAO.get_assignable_tasks(task_type, limit)
             else:
-                tasks = CrawlTaskDAO.fetch_pending(task_type, limit)
+                tasks = TaskDAO.fetch_pending(task_type, limit)
         else:
-            tasks = CrawlTaskDAO.get_assignable_tasks(limit=limit)
+            tasks = TaskDAO.get_assignable_tasks(limit=limit)
         
         return {"tasks": tasks}
         
@@ -365,7 +365,7 @@ async def assign_task(assignment: TaskAssignment):
             raise HTTPException(status_code=400, detail="Device is not available")
         
         # 分配任务
-        success = CrawlTaskDAO.assign_task(assignment.task_id, assignment.device_id)
+        success = TaskDAO.assign_task(assignment.task_id, assignment.device_id)
         
         if success:
             # 创建分配记录
@@ -403,10 +403,10 @@ async def update_task_status(status_update: TaskStatusUpdate):
         if success:
             # 更新任务表状态
             if status_update.status == 'completed':
-                CrawlTaskDAO.mark_done(status_update.task_id)
+                TaskDAO.mark_done(status_update.task_id)
                 DeviceDAO.decrement_task_count(status_update.device_id)
             elif status_update.status == 'failed':
-                CrawlTaskDAO.fail_task(status_update.task_id, 300)  # 5分钟后重试
+                TaskDAO.fail_task(status_update.task_id, 300)  # 5分钟后重试
                 DeviceDAO.decrement_task_count(status_update.device_id)
             
             return {"status": "success", "message": "Task status updated"}
@@ -430,7 +430,7 @@ async def pull_tasks(device_id: str, limit: int = Query(5, le=10)):
             raise HTTPException(status_code=400, detail="Device is not online")
         
         # 获取设备当前任务
-        current_tasks = CrawlTaskDAO.get_device_tasks(device_id)
+        current_tasks = TaskDAO.get_device_tasks(device_id)
         available_slots = max(0, limit - len(current_tasks))
         
         if available_slots == 0:
@@ -454,7 +454,7 @@ async def get_system_overview():
     """获取系统概览"""
     try:
         # 任务统计
-        task_stats = CrawlTaskDAO.get_task_stats()
+        task_stats = TaskDAO.get_task_stats()
         
         # 设备统计
         all_devices = DeviceDAO.get_all_devices()

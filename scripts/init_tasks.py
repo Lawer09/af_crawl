@@ -31,7 +31,7 @@ from typing import List, Dict, Optional
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.user import UserDAO
 from model.user_app import UserAppDAO
 from core.db import mysql_pool
@@ -50,7 +50,7 @@ class TaskInitializer:
     def __init__(self):
         """初始化"""
         # 确保数据库表存在
-        CrawlTaskDAO.init_table()
+        TaskDAO.init_table()
         UserAppDAO.init_table()
         
     def init_user_apps_tasks(self, force: bool = False) -> int:
@@ -67,7 +67,7 @@ class TaskInitializer:
         
         # 检查是否已有待处理的任务
         if not force:
-            existing_tasks = CrawlTaskDAO.fetch_pending('user_apps', 1)
+            existing_tasks = TaskDAO.fetch_pending('user_apps', 1)
             if existing_tasks:
                 logger.info(f"已存在 {len(existing_tasks)} 个待处理的用户应用同步任务，跳过初始化")
                 return 0
@@ -94,7 +94,7 @@ class TaskInitializer:
             init_tasks.append(task)
         
         if init_tasks:
-            CrawlTaskDAO.add_tasks(init_tasks)
+            TaskDAO.add_tasks(init_tasks)
             logger.info(f"成功创建 {len(init_tasks)} 个用户应用同步任务")
             
         return len(init_tasks)
@@ -114,7 +114,7 @@ class TaskInitializer:
         
         # 检查是否已有待处理的任务
         if not force:
-            existing_tasks = CrawlTaskDAO.fetch_pending('app_data', 1)
+            existing_tasks = TaskDAO.fetch_pending('app_data', 1)
             if existing_tasks:
                 logger.info(f"已存在 {len(existing_tasks)} 个待处理的应用数据同步任务，跳过初始化")
                 return 0
@@ -153,7 +153,7 @@ class TaskInitializer:
                 init_tasks.append(task)
         
         if init_tasks:
-            CrawlTaskDAO.add_tasks(init_tasks)
+            TaskDAO.add_tasks(init_tasks)
             logger.info(f"成功创建 {len(init_tasks)} 个应用数据同步任务")
             
         return len(init_tasks)
@@ -173,7 +173,7 @@ class TaskInitializer:
         try:
             if task_type:
                 sql = f"""
-                UPDATE {CrawlTaskDAO.TABLE} 
+                UPDATE {TaskDAO.TABLE} 
                 SET status='pending', retry=0, assigned_device_id=NULL, assigned_at=NULL, 
                     next_run_at=NOW(), updated_at=NOW()
                 WHERE status='failed' AND task_type=%s
@@ -181,7 +181,7 @@ class TaskInitializer:
                 result = mysql_pool.execute(sql, (task_type,))
             else:
                 sql = f"""
-                UPDATE {CrawlTaskDAO.TABLE} 
+                UPDATE {TaskDAO.TABLE} 
                 SET status='pending', retry=0, assigned_device_id=NULL, assigned_at=NULL, 
                     next_run_at=NOW(), updated_at=NOW()
                 WHERE status='failed'
@@ -211,7 +211,7 @@ class TaskInitializer:
             timeout_time = datetime.now() - timedelta(hours=timeout_hours)
             
             sql = f"""
-            UPDATE {CrawlTaskDAO.TABLE} 
+            UPDATE {TaskDAO.TABLE} 
             SET status='pending', assigned_device_id=NULL, assigned_at=NULL, 
                 next_run_at=NOW(), updated_at=NOW()
             WHERE status IN ('assigned', 'running') 
@@ -249,7 +249,7 @@ class TaskInitializer:
             status_placeholders = ','.join(['%s'] * len(status_list))
             
             sql = f"""
-            DELETE FROM {CrawlTaskDAO.TABLE} 
+            DELETE FROM {TaskDAO.TABLE} 
             WHERE status IN ({status_placeholders}) 
               AND updated_at < %s
             """
@@ -275,7 +275,7 @@ class TaskInitializer:
             # 按状态统计
             sql = f"""
             SELECT status, COUNT(*) as count
-            FROM {CrawlTaskDAO.TABLE}
+            FROM {TaskDAO.TABLE}
             GROUP BY status
             """
             status_stats = mysql_pool.select(sql)
@@ -283,7 +283,7 @@ class TaskInitializer:
             # 按任务类型统计
             sql = f"""
             SELECT task_type, status, COUNT(*) as count
-            FROM {CrawlTaskDAO.TABLE}
+            FROM {TaskDAO.TABLE}
             GROUP BY task_type, status
             """
             type_stats = mysql_pool.select(sql)
@@ -291,7 +291,7 @@ class TaskInitializer:
             # 最近24小时统计
             sql = f"""
             SELECT status, COUNT(*) as count
-            FROM {CrawlTaskDAO.TABLE}
+            FROM {TaskDAO.TABLE}
             WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
             GROUP BY status
             """
@@ -342,7 +342,7 @@ class TaskInitializer:
                 'max_retry_count': 3
             }
             
-            CrawlTaskDAO.add_tasks([task])
+            TaskDAO.add_tasks([task])
             logger.info(f"成功创建自定义任务: {task_type} for {username}")
             return True
             

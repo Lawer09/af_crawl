@@ -156,4 +156,5 @@ def prt_auth(pid:str, prt:str):
         AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
     except Exception as e:
         logger.warning("Handshake sync failed: pid=%s prt=%s -> %s", pid, prt, e)
+        raise Exception(f"failed for {pid} -> {e}")
     return result

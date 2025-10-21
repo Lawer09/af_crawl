@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from model.device import DeviceDAO
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
 
@@ -77,7 +77,7 @@ class TaskDispatcher:
                 return
             
             # 获取待分配任务
-            pending_tasks = CrawlTaskDAO.get_assignable_tasks(limit=100)
+            pending_tasks = TaskDAO.get_assignable_tasks(limit=100)
             if not pending_tasks:
                 logger.debug("No pending tasks to dispatch")
                 return
@@ -114,7 +114,7 @@ class TaskDispatcher:
             available_devices = []
             for device in online_devices:
                 # 检查设备当前任务数
-                current_tasks = len(CrawlTaskDAO.get_device_tasks(device['device_id']))
+                current_tasks = len(TaskDAO.get_device_tasks(device['device_id']))
                 if current_tasks < self.max_tasks_per_device:
                     device['current_tasks'] = current_tasks
                     available_devices.append(device)
@@ -210,7 +210,7 @@ class TaskDispatcher:
                 return False
             
             # 更新任务状态为已分配
-            if CrawlTaskDAO.assign_task(task_id, device_id):
+            if TaskDAO.assign_task(task_id, device_id):
                 # 创建任务分配记录
                 assignment_id = TaskAssignmentDAO.create_assignment(task_id, device_id)
                 if assignment_id:
@@ -220,10 +220,10 @@ class TaskDispatcher:
                     return True
                 else:
                     # 回滚任务状态
-                    CrawlTaskDAO.release_device_tasks(device_id)
+                    TaskDAO.release_device_tasks(device_id)
                     logger.error(f"Failed to create assignment record for task {task_id}, task will be retried")
                     # 将任务重新标记为待分配
-                    CrawlTaskDAO.reset_task_for_retry(task_id)
+                    TaskDAO.reset_task_for_retry(task_id)
             
             return False
             
@@ -251,15 +251,15 @@ class TaskDispatcher:
                 DeviceDAO.decrement_task_count(device_id)
                 
                 # 检查是否需要重试
-                task = CrawlTaskDAO.fetch_pending('', 1)  # 获取任务详情
+                task = TaskDAO.fetch_pending('', 1)  # 获取任务详情
                 if task and retry_count < task[0].get('max_retry_count', 3):
                     # 重新分配任务
-                    CrawlTaskDAO.assign_task(task_id, None)  # 清除设备分配
+                    TaskDAO.assign_task(task_id, None)  # 清除设备分配
                     TaskAssignmentDAO.increment_retry_count(assignment['id'])
                     logger.info(f"Task {task_id} will be retried")
                 else:
                     # 标记任务失败
-                    CrawlTaskDAO.fail_task(task_id, 0)
+                    TaskDAO.fail_task(task_id, 0)
                     logger.error(f"Task {task_id} failed after max retries")
                     
         except Exception as e:
@@ -269,7 +269,7 @@ class TaskDispatcher:
         """获取分发统计信息"""
         try:
             # 获取任务统计
-            task_stats = CrawlTaskDAO.get_task_stats()
+            task_stats = TaskDAO.get_task_stats()
             
             # 获取设备统计
             online_devices = DeviceDAO.get_available_devices()
@@ -279,7 +279,7 @@ class TaskDispatcher:
             total_assignments = 0
             active_assignments = 0
             for device in online_devices:
-                device_tasks = CrawlTaskDAO.get_device_tasks(device['device_id'])
+                device_tasks = TaskDAO.get_device_tasks(device['device_id'])
                 total_assignments += len(device_tasks)
                 active_assignments += len([t for t in device_tasks if t['status'] == 'running'])
             
@@ -308,13 +308,13 @@ class TaskDispatcher:
                 return False
             
             # 检查设备任务数是否已满
-            current_tasks = len(CrawlTaskDAO.get_device_tasks(device_id))
+            current_tasks = len(TaskDAO.get_device_tasks(device_id))
             if current_tasks >= self.max_tasks_per_device:
                 logger.error(f"Device {device_id} has reached max task limit")
                 return False
             
             # 分配任务
-            if CrawlTaskDAO.assign_task(task_id, device_id):
+            if TaskDAO.assign_task(task_id, device_id):
                 assignment_id = TaskAssignmentDAO.create_assignment(task_id, device_id)
                 if assignment_id:
                     DeviceDAO.increment_task_count(device_id)
@@ -338,7 +338,7 @@ class TaskDispatcher:
             total_tasks = 0
             
             for device in devices:
-                tasks = CrawlTaskDAO.get_device_tasks(device['device_id'])
+                tasks = TaskDAO.get_device_tasks(device['device_id'])
                 device_tasks[device['device_id']] = tasks
                 total_tasks += len(tasks)
             
@@ -368,7 +368,7 @@ class TaskDispatcher:
                         task = tasks[i]
                         
                         # 重新分配任务
-                        if CrawlTaskDAO.assign_task(task['id'], target_device):
+                        if TaskDAO.assign_task(task['id'], target_device):
                             # 更新分配记录
                             TaskAssignmentDAO.update_status_by_task_device(
                                 task['id'], device_id, 'completed', 'Rebalanced to another device'

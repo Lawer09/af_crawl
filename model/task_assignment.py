@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from model.crawl_task import CrawlTaskDAO
+from model.task import TaskDAO
 from model.device import DeviceDAO
 
 from core.db import mysql_pool
@@ -147,7 +147,7 @@ class TaskAssignmentDAO:
             SELECT ta.id, ta.task_id, ta.device_id, ta.status, ta.assigned_at, 
                    ta.started_at, ta.retry_count, ct.task_type, ct.task_data
             FROM {cls.TABLE} ta
-            JOIN {CrawlTaskDAO.TABLE} ct ON ta.task_id = ct.id
+            JOIN {TaskDAO.TABLE} ct ON ta.task_id = ct.id
             WHERE ta.device_id = %s AND ta.status IN ('assigned', 'running')
             ORDER BY ta.assigned_at
             """
