@@ -112,6 +112,22 @@ class UserProxyDAO:
             return None
     
     @classmethod
+    def get_random_one(cls) -> Optional[Dict]:
+        """随机获取一条未停用的代理记录"""
+        try:
+            sql = (
+                f"SELECT id, pid, proxy_url, country, sub_at, end_at, created_at, "
+                f"system_type, ua, timezone_id FROM {cls.TABLE} WHERE deactivate = 0 ORDER BY RAND() LIMIT 1"
+            )
+            rows = mysql_pool.select(sql)
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching random user proxy: {e}")
+            return None
+
+    @classmethod
     def get_enable(cls) -> Optional[Dict]:
         """根据所有代理记录"""
         try:

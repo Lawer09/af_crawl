@@ -22,17 +22,21 @@ from config.settings import CRAWLER
 from core.logger import setup_logging  # noqa
 
 
-def create_task_data(type:str, pid:str, app_id:str, aff_id:str, date:str) -> Dict:
+def create_task_data(pid:str, params:list[dict]) -> str:
     import json
-    return json.dumps({
-        'type': type,
-        'pid': pid,
-        'app_id': app_id,
-        'aff_id': aff_id,
-        'date': date,
-    })
+    params_data = []
+    for param in params:
+        params_data.append({
+            "pid": pid,
+            "app_id": param.get("app_id"),
+            "aff_id": param.get("aff_id"),
+            "date": param.get("date"),
+        })
+
+    return json.dumps(params_data)
 
 def parse_task_data(task_data: Any) -> Dict:
+    
     import json
     try:
         if isinstance(task_data, dict):
@@ -174,7 +178,6 @@ def handle(tasks:dict):
     for pid, tasks in pid_task_map.items():
         task_queue.put(tasks)
     
-    return
     # 使用线程池处理任务队列
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         # 为每个线程分配任务处理器

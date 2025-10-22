@@ -12,7 +12,6 @@ from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
 from services import af_config_service
-from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
 from services.data_service import fetch_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data

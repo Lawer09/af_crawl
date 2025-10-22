@@ -43,7 +43,7 @@ def start_update_data_scheduler(interval_hours: int = 24):
             update_daily_data()
         except Exception:
             logger.exception("update_daily_data scheduled run failed")
-        # time.sleep(interval_hours * 3600)
+        time.sleep(interval_hours * 3600)
 
     t = threading.Thread(target=_runner, name="update_data_scheduler", daemon=True)
     t.start()

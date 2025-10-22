@@ -51,8 +51,11 @@ def get_session(username: str, password: str, proxies: dict | None = None, brows
 
 
 def get_session_by_user(username:str, password:str, pid:str) -> Session:
-    """通过用户名与密码获取会话"""
+    """通过用户名与密码获取会话，该接口在，使用随机代理"""
+   
     proxy_rec = UserProxyDAO.get_by_pid(pid)
+    if not proxy_rec:
+        proxy_rec = UserProxyDAO.get_random_one()
     proxies = None
     browser_context_args = {}
     if proxy_rec:

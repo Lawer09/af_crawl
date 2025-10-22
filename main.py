@@ -79,7 +79,7 @@ def _parse_args():
     p_status.add_argument("--master-host", default="localhost", help="主节点地址")
     p_status.add_argument("--master-port", type=int, default=7989, help="主节点端口")
 
-    sub.add_parser("task_manager", help="本地任务处理（非分布式）")
+    sub.add_parser("task", help="本地任务处理（非分布式）")
     sub.add_parser("create_today_tasks", help="创建今日的应用数据任务")
 
     return parser.parse_args()
@@ -108,19 +108,11 @@ if __name__ == "__main__":
         logger.info("=== sync_apps start ===")
         sync_apps_run()
 
-    elif args.command == "sync_apps_cron":
-        from schedulers.app_jobs import run_update_apps_cron
-        run_update_apps_cron(interval_minutes=args.interval_minutes)
-
     elif args.command == "sync_data":
         from tasks.sync_app_data import run as sync_data_run
         logger.info("=== sync_data start days=%d ===", args.days)
         sync_data_run(days=args.days)
 
-    elif args.command == "sync_data_cron":
-        from schedulers.app_jobs import run_data
-        run_data()
-    
     elif args.command == "web":
         from web_app import app
         import uvicorn
@@ -167,10 +159,11 @@ if __name__ == "__main__":
         # except KeyboardInterrupt:
         #     logger.info("cron stopped by user")
     
-    elif args.command == "task_manager":
-        from tasks.task_manager import run as task_manager_run
+    elif args.command == "task":
+        from tasks import task_manager
         logger.info("=== task_manager start ===")
-        task_manager_run()
+        task_manager.run()
+
     elif args.command == "create_today_tasks":
         from tasks.sync_af_data import create_now_task
         logger.info("=== create_today_tasks start ===")

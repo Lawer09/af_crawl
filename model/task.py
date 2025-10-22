@@ -17,18 +17,17 @@ class TaskDAO:
     CREATE TABLE IF NOT EXISTS {TABLE} (
         id INT AUTO_INCREMENT PRIMARY KEY,
         retry INT DEFAULT 0,
-        status ENUM('pending','running','failed','done','assigned') DEFAULT 'pending',
+        status ENUM('pending','running','failed','done') DEFAULT 'pending',
         next_run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        assigned_device_id VARCHAR(64) DEFAULT NULL COMMENT '分配的设备ID',
-        assigned_at DATETIME DEFAULT NULL COMMENT '分配时间',
         priority INT DEFAULT 0 COMMENT '任务优先级',
+        task_type VARCHAR(64) DEFAULT NULL COMMENT '任务类型',
         task_data JSON DEFAULT NULL COMMENT '任务数据',
         max_retry_count INT DEFAULT 3 COMMENT '最大重试次数',
         execution_timeout INT DEFAULT 3600 COMMENT '任务执行超时时间（秒）',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_status_next (status, next_run_at),
-        KEY idx_assigned_device (assigned_device_id),
+        KEY idx_task_type (task_type),
         KEY idx_priority (priority)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
@@ -38,39 +37,51 @@ class TaskDAO:
         mysql_pool.execute(cls.CREATE_SQL)
         logger.info(f"Table {cls.TABLE} initialized.")
 
+    @classmethod
+    def add_task(cls, task_type:str, task_data:str, next_run_at:str, priority:int=0, execution_timeout:int=3600, max_retry_count:int=3):
+        """添加任务"""
+        import json
+        sql = f"""
+        INSERT INTO {cls.TABLE}
+            (task_type, task_data, next_run_at, priority, execution_timeout, max_retry_count)
+        VALUES (%s,%s,%s,%s,%s,%s)
+        """
+        params = (task_type, task_data, next_run_at, priority, execution_timeout, max_retry_count)
+        mysql_pool.execute(sql, params)
     
+    @classmethod
+    def get_task(cls, task_id: int) -> Optional[dict]:
+        """根据任务ID获取任务详情"""
+        sql = f"SELECT * FROM {cls.TABLE} WHERE id=%s"
+        result = mysql_pool.select(sql, (task_id,))
+        return result[0] if result else None
+
     @classmethod
     def add_tasks(cls, tasks: List[Dict]):
         if not tasks:
-            return
+            return False
 
-        sql = f"""
-        INSERT INTO {cls.TABLE}
-            (task_data, next_run_at, priority, execution_timeout, max_retry_count)
-        VALUES (%s,%s,%s,%s,%s)
-        """
+        try:
+            sql = f"""
+            INSERT INTO {cls.TABLE}
+                (task_type, task_data, next_run_at, priority, execution_timeout, max_retry_count)
+            VALUES (%s,%s,%s,%s,%s,%s)
+            """
 
-        import json
-        params = [(
-            json.dumps(t.get('task_data')) if t.get('task_data') else None,
-            t.get('next_run_at'), t.get('priority', 0), 
-            t.get('execution_timeout', 3600), t.get('max_retry_count', 3)
-        ) for t in tasks]
-        mysql_pool.executemany(sql, params)
-
-
-    @classmethod
-    def get_existing_tasks(cls, username: str, app_id: str, task_type: str) -> set:
-        sql = f"""
-        SELECT CONCAT(username, '_', app_id, '_', start_date, '_', end_date) as task_key
-        FROM {cls.TABLE}
-        WHERE username = %s AND app_id = %s AND task_type = %s
-        """
-        results = mysql_pool.select(sql, (username, app_id, task_type))
-        return {row['task_key'] for row in results}
+            params = [(
+                t.get('task_type'),
+                t.get('task_data'),
+                t.get('next_run_at'), t.get('priority', 0), 
+                t.get('execution_timeout', 3600), t.get('max_retry_count', 3)
+            ) for t in tasks]
+            mysql_pool.executemany(sql, params)
+            return True
+        except Exception as e:
+            logger.exception(f"Add tasks failed: {e}")
+            return False
 
     @classmethod
-    def get_all_pending_task(cls, task_type: Optional[str] = None, limit: int = 1000) -> List[Dict]:
+    def get_pending_by_type(cls, task_type:str, limit: int = 100) -> List[Dict]:
         """
         获取待执行的任务列表（过滤重试次数）
         """
@@ -84,6 +95,16 @@ class TaskDAO:
                      WHERE status='pending' AND next_run_at<=NOW() AND retry < max_retry_count
                      ORDER BY next_run_at LIMIT %s"""
             return mysql_pool.select(sql, (limit,))
+
+    @classmethod
+    def get_pending(cls, limit: int = 100) -> List[Dict]:
+        """
+        获取待执行的任务列表（过滤重试次数）
+        """
+        sql = f"""SELECT * FROM {cls.TABLE}
+                 WHERE status='pending' AND next_run_at<=NOW() AND retry < max_retry_count
+                 ORDER BY next_run_at LIMIT %s"""
+        return mysql_pool.select(sql, (limit,))
 
     @classmethod
     def mark_running(cls, task_id: int, device_id: Optional[str] = None):
