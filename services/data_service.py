@@ -140,12 +140,12 @@ def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
     within_minutes = 180  # 默认 3 小时
 
     # 1. 先查 DB 缓存（包含 aff_id 过滤）
-    cached = UserAppDataDAO.get_recent_rows(pid, app_id, date, date, aff_id, within_minutes)
+    cached = UserAppDataDAO.get_recent_rows(pid=pid, app_id=app_id, date=date, date=date, aff_id=aff_id, within_minutes=within_minutes)
     if cached:
         return cached
 
     # 2. 无缓存则实时查询
-    return fetch_and_save_data(pid, app_id, aff_id, date)
+    return fetch_and_save_data(pid=pid, app_id=app_id, aff_id=aff_id, date=date)
 
 
 def try_get_by_pid_and_offer_id(pid: str, app_id: str, aff_id: str, offer_id: str | None = None, date: str | None = None):
