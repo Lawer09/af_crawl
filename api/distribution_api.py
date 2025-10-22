@@ -166,7 +166,7 @@ def set_af_pb_config(
     pid: str = Query(..., description="用户PID")
 ):
     """通过 pid 配置 af pb 认证"""
-    try:    
+    try:
         rows = af_config_service.set_pb_config(
             pid=pid,
             username=username,
@@ -176,7 +176,7 @@ def set_af_pb_config(
 
     except HTTPException:
         raise
-    
+
     except Exception as e:
         logger.exception(f"Error setting pb config for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

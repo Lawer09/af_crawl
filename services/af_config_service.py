@@ -174,7 +174,7 @@ def set_pb_config(username:str, password:str, pid:str):
     import time
 
     # 获取一个的域名（来自 _tb_auto_cfg_pb）
-    pb_config = AfPbConfigDAO.get_by_pid(pid)
+    pb_config = AfPbConfigDAO.get_by_account(username)
     if not pb_config:
         logger.error("No active pb_config found in _tb_auto_cfg_pb; aborting PB config for pid %s", pid)
         raise Exception(f"{pid} no active pb_config ")
