@@ -63,13 +63,11 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         # 增强错误日志，便于诊断 400/403 等问题
         try:
             logger.error(
-                "fetch_pid_app_data failed pid=%s app_id=%s status=%s url=%s body_preview=%s payload=%s",
+                "fetch_pid_app_data failed pid=%s app_id=%s status=%s url=%s",
                 pid,
                 app_id,
                 getattr(e.response, "status_code", None) if hasattr(e, "response") else None,
-                cfg.NEW_TABLE_API,
-                (getattr(e.response, "text", "")[:300] if hasattr(e, "response") else "") if not isinstance(e, ValueError) else "",
-                {**payload, "dates": payload.get("dates"), "filters": payload.get("filters")},
+                cfg.NEW_TABLE_API
             )
         except Exception:
             logger.exception("fetch_pid_app_data logging failed")

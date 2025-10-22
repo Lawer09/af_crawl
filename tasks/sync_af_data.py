@@ -117,6 +117,8 @@ def handle(task_data_str:str):
         logger.warning(f"app_affs_map is empty for pid={pid} date={date}")
         return False
     
+    logger.info(f"开始任务 pid={pid} date={date}")
+    
     # 数据库获取当前日期最近的更新数据
     recent_data = UserAppDataDAO.get_recent_by_pid(pid, date, 120)
     recent_key = [f"{pid}_{data.get('app_id')}_{data.get('aff_id')}" for data in recent_data]
@@ -128,6 +130,7 @@ def handle(task_data_str:str):
             key = f"{pid}_{app_id}_{aff_id}"
             if key in recent_key_set:
                 recent_key_set.remove(key)
+                logger.info(f"新数据已存在 pid={pid} app_id={app_id} aff_id={aff_id}")
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
@@ -135,11 +138,12 @@ def handle(task_data_str:str):
 
             try:
                 data_service.fetch_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
+                logger.info(f"新数据已保存 pid={pid} app_id={app_id} aff_id={aff_id}")
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
             except Exception as e:
-                logger.error(f"Error processing {key}: {str(e)}")
+                logger.error(f"task fail processing {key}: {str(e)}")
                 continue
 
     return not new_app_affs_map, create_task_data(pid=pid, date=date, app_affs_map=new_app_affs_map)
