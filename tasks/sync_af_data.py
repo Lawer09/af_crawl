@@ -134,13 +134,13 @@ def handle(task_data_str:str):
                 continue
 
             try:
-                data_service.fetch_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
-                logger.info(f"新数据已保存 pid={pid} app_id={app_id} aff_id={aff_id}")
+                rows = data_service.fetch_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
+                logger.info(f"新数据已保存 pid={pid} app_id={app_id} aff_id={aff_id} rows={len(rows)}")
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
             except Exception as e:
                 logger.error(f"task fail processing {key}: {str(e)}")
-                continue
+                return False, create_task_data(pid=pid, date=date, app_affs_map=new_app_affs_map)
 
     return not new_app_affs_map, create_task_data(pid=pid, date=date, app_affs_map=new_app_affs_map)
