@@ -50,6 +50,22 @@ def get_session(username: str, password: str, proxies: dict | None = None, brows
     return sess
 
 
+def get_session_by_user(username:str, password:str, pid:str) -> Session:
+    """通过用户名与密码获取会话"""
+    proxy_rec = UserProxyDAO.get_by_pid(pid)
+    proxies = None
+    browser_context_args = {}
+    if proxy_rec:
+        if proxy_rec.get("proxy_url"):
+            proxies = {"http": proxy_rec["proxy_url"], "https": proxy_rec["proxy_url"]}
+        if proxy_rec.get("ua"):
+            browser_context_args["user_agent"] = proxy_rec["ua"]
+        if proxy_rec.get("timezone_id"):
+            browser_context_args["timezone_id"] = proxy_rec["timezone_id"]
+    # 3. 调用 get_session 函数获取会话
+    return get_session(username, password, proxies=proxies, browser_context_args=browser_context_args)
+
+
 def get_session_by_pid(pid: str) -> Session:
     """通过 pid 获取用户与代理信息，生成带 Cookie/UA/代理 的 requests.Session。
 

@@ -45,7 +45,6 @@ def parse_task_data(task_data: Any) -> Dict:
         logger.warning("Invalid task_data format: %s", e)
     return {}
 
-
 def create_task(date:str) -> None:
     """
     创建应用数据任务

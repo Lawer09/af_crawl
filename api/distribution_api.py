@@ -11,12 +11,12 @@ from model.device import DeviceDAO
 from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
+from services import af_config_service
 from services.task_dispatcher import TaskDispatcher, LoadBalanceStrategy
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
 from services.data_service import fetch_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data
 from services.app_service import fetch_app_by_pid
-from services.authorize_service import prt_auth
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def set_pid_auth_prt(
     """添加pid的prt认证"""
     try:
         # 调用数据服务添加认证
-        prt_list = prt_auth(pid, prt)
+        prt_list = af_config_service.prt_auth(pid, prt)
         return {"status": "success", "data": prt_list}
     except Exception as e:
         logger.error(f"Error adding prt auth for pid {pid}: {e}")
@@ -121,7 +121,7 @@ def get_user_app_data_by_pid(
 
 @router.get("/user/app/data/gap")
 def get_user_app_data_gap_by_pid(
-    pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
+    pid: str = Query(..., description="用户PID"),
     app_id: str = Query(..., description="应用ID"),
     aff_id: Optional[str] = Query(None, description="aff ID（可选）"),
     offer_id: Optional[str] = Query(None, description="offer ID（可选）"),
@@ -148,7 +148,7 @@ def get_user_app_data_gap_by_pid(
 
 @router.get("/user/app")
 def get_user_app_by_pid(
-    pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
+    pid: str = Query(..., description="用户PID"),
 ):
     """通过 pid 获取用户 app 列表"""
     try:
@@ -157,6 +157,30 @@ def get_user_app_by_pid(
     except Exception as e:
         logger.exception(f"Error fetching user app data by pid: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# 配置 af pb
+@router.get("/user/auth/pb")
+def set_af_pb_config(
+    username: str = Query(..., description="用户名"),
+    password: str = Query(..., description="密码"),
+    pid: str = Query(..., description="用户PID")
+):
+    """通过 pid 配置 af pb 认证"""
+    try:    
+        rows = af_config_service.set_pb_config(
+            pid=pid,
+            username=username,
+            password=password,
+        )
+        return {"status": "success", "data": rows}
+
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        logger.exception(f"Error setting pb config for pid {pid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # 设备管理接口
 @router.post("/devices/register")
