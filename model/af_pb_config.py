@@ -23,12 +23,12 @@ class AfPbConfigDAO:
         account VARCHAR(128) DEFAULT NULL,
         password VARCHAR(128) DEFAULT NULL,
         pid VARCHAR(128) DEFAULT NULL,
-        pbDomain VARCHAR(255) DEFAULT NULL,
+        pb_domain VARCHAR(255) DEFAULT NULL,
         status INT DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_status (status),
-        KEY idx_domain (pbDomain)
+        KEY idx_domain (pb_domain)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
 
@@ -41,11 +41,24 @@ class AfPbConfigDAO:
             logger.exception(f"Init table {cls.TABLE} failed: {e}")
 
     @classmethod
+    def get_by_account(cls, account: str) -> Optional[dict]:
+        """根据 username 获取一条待配置记录（status=0）。"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT id, pid, account, password, pb_domain, status FROM {cls.TABLE} WHERE status=0 AND account=%s LIMIT 1",
+                (account,)
+            )
+            return rows[0] if rows else None
+        except Exception as e:
+            logger.exception(f"Get one available config failed: {e}")
+            return None
+
+    @classmethod
     def get_by_pid(cls, pid: str) -> Optional[dict]:
         """根据 pid 获取一条待配置记录（status=0）。"""
         try:
             rows = mysql_pool.select(
-                f"SELECT id, pid, account, password, pbDomain, status FROM {cls.TABLE} WHERE status=0 AND pid=%s LIMIT 1",
+                f"SELECT id, pid, account, password, pb_domain, status FROM {cls.TABLE} WHERE status=0 AND pid=%s LIMIT 1",
                 (pid,)
             )
             return rows[0] if rows else None
@@ -59,20 +72,6 @@ class AfPbConfigDAO:
             return []
         parts = [p.strip() for p in str(csv_val).split(',')]
         return [p for p in parts if p]
-
-    @classmethod
-    def get_random_domain_and_config(cls) -> Optional[tuple[str, int]]:
-        """从一条待配置记录的 pbDomain CSV 中随机选择一个域名，返回 (domain, config_id)。"""
-        import random
-        cfg_row = cls.get_one_available_config()
-        if not cfg_row:
-            return None
-        domains = cls._parse_domain_csv(cfg_row.get('pbDomain'))
-        if not domains:
-            logger.warning("Available config has empty pbDomain CSV; id=%s", cfg_row.get('id'))
-            return None
-        domain = random.choice(domains)
-        return domain, int(cfg_row.get('id'))
 
     @classmethod
     def mark_config_active_by_id(cls, config_id: int, status: int = 1) -> bool:

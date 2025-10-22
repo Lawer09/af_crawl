@@ -186,7 +186,7 @@ def set_pb_config(username:str, password:str, pid:str):
         domains = [p for p in parts if p]
         return random.choice(domains) if domains else None
 
-    domain, cfg_id = get_random_domain(pb_config["pbDomain"]), pb_config["id"]
+    domain, cfg_id = get_random_domain(pb_config["pb_domain"]), pb_config["id"]
 
     if not domain:
         logger.error("No available domain found in pbDomain for pid %s", pid)
