@@ -140,7 +140,7 @@ def get_user_app_data_gap_by_pid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error fetching user app data by pid: {e}")
+        logger.exception(f"Error fetching user app data by pid: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
