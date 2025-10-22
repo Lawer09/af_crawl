@@ -117,7 +117,7 @@ def handle(task_data_str:str):
         return False
     
     # 数据库获取当前日期最近的更新数据
-    recent_data = UserAppDataDAO.get_recent_by_pid(pid, date, date, 120)
+    recent_data = UserAppDataDAO.get_recent_by_pid(pid, date, 120)
     recent_key = [f"{pid}_{data.get('app_id')}_{data.get('aff_id')}" for data in recent_data]
     recent_key_set = set[str](recent_key)
     
