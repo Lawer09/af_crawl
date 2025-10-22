@@ -85,7 +85,7 @@ def set_pid_auth_prt(
         prt_list = af_config_service.prt_auth(pid, prt)
         return {"status": "success", "data": prt_list}
     except Exception as e:
-        logger.error(f"Error adding prt auth for pid {pid}: {e}")
+        logger.error(f"Error adding prt auth for pid {pid}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -113,7 +113,7 @@ def get_user_app_data_by_pid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error fetching user app data by pid: {e}")
+        logger.exception(f"Error fetching user app data by pid: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

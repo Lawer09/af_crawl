@@ -3,6 +3,7 @@ import json
 
 from model.aff import AffDAO, OfferAffDAO
 from model.user_app_data import UserAppDataDAO
+from services import data_service
 
 """按用户分组的多线程数据同步 - 修复版"""
 
@@ -133,12 +134,12 @@ def handle(task_data_str:str):
                 continue
 
             try:
-                try_get_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
+                data_service.fetch_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
             except Exception as e:
-                logger.error(f"Error processing {key}: {e}")
+                logger.error(f"Error processing {key}: {str(e)}")
                 continue
 
     return not new_app_affs_map, create_task_data(pid=pid, date=date, app_affs_map=new_app_affs_map)

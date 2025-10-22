@@ -60,6 +60,20 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
         resp.raise_for_status()
     except Exception as e:
+        # 增强错误日志，便于诊断 400/403 等问题
+        try:
+            logger.error(
+                "fetch_pid_app_data failed pid=%s app_id=%s status=%s url=%s body_preview=%s headers=%s payload=%s",
+                pid,
+                app_id,
+                getattr(e.response, "status_code", None) if hasattr(e, "response") else None,
+                cfg.NEW_TABLE_API,
+                (getattr(e.response, "text", "")[:300] if hasattr(e, "response") else "") if not isinstance(e, ValueError) else "",
+                headers,
+                {**payload, "dates": payload.get("dates"), "filters": payload.get("filters")},
+            )
+        except Exception:
+            logger.exception("fetch_pid_app_data logging failed")
         logger.warning("fetch_pid_app_data request failed for pid=%s -> %s; skip", pid, e)
         raise
 
@@ -129,14 +143,14 @@ def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[D
         save_data_bulk(pid, date, rows)
         return rows
     except Exception as e:
-        logger.error(f"Failed to fetch and save data for pid={pid} app_id={app_id} aff_id={aff_id} date={date}: {e}")
+        logger.error(f"Failed to fetch and save data for pid={pid} app_id={app_id} aff_id={aff_id} date={date}: {str(e)}")
         raise
 
 
 def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
     """
     最近 3 小时缓存命中则返回；否则实时查询并落库。
-    """     
+    """
     within_minutes = 180  # 默认 3 小时
 
     # 1. 先查 DB 缓存（包含 aff_id 过滤）
