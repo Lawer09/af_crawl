@@ -161,7 +161,7 @@ def prt_auth(pid:str, prt:str):
     return result
 
 
-def set_pb_config(username:str, passwrod:str, pid:str):
+def set_pb_config(username:str, password:str, pid:str):
     """设置 AppsFlyer PB 配置：
     - 先写入 Attribution Postbacks 基础配置
     - 设置 Regular Postbacks（install/inappevent）
@@ -192,7 +192,7 @@ def set_pb_config(username:str, passwrod:str, pid:str):
         logger.error("No available domain found in pbDomain for pid %s", pid)
         raise Exception(f"{pid} no available domain in pbDomain")
 
-    sess = get_session_by_user(username, passwrod, pid)
+    sess = get_session_by_user(username, password, pid)
     headers = {
         "Origin": "https://hq1.appsflyer.com",
         "Referer": "https://hq1.appsflyer.com/partners/integrations",
