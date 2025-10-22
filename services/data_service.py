@@ -15,35 +15,8 @@ from model.aff import OfferAffDAO, AffDAO
 from model.user import UserProxyDAO
 from utils.retry import request_with_retry
 from core.db import mysql_pool
-import threading
 
 logger = logging.getLogger(__name__)
-
-# ------------------ singleflight (per-key) ------------------
-_sf_lock = threading.RLock()
-_sf_events: Dict[str, threading.Event] = {}
-
-def _sf_begin(key: str) -> tuple[bool, threading.Event]:
-    """Mark a key as in-flight. Returns (is_leader, event_to_wait)."""
-    with _sf_lock:
-        ev = _sf_events.get(key)
-        if ev is None:
-            ev = threading.Event()
-            _sf_events[key] = ev
-            return True, ev
-        return False, ev
-
-def _sf_end(key: str) -> None:
-    """Finish in-flight and wake followers."""
-    ev: threading.Event | None = None
-    with _sf_lock:
-        ev = _sf_events.pop(key, None)
-    if ev:
-        try:
-            ev.set()
-        except Exception:
-            pass
-
 
 def parse_app_data(data:List[Dict]) -> List[Dict]:
     rows: List[Dict] = []
@@ -68,7 +41,7 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         session = get_session_by_pid(pid)
     except Exception as e:
         logger.error(f"Failed to init session for pid={pid}: {e}")
-        return []
+        raise
 
     headers = {
         "Referer": cfg.NEW_TABLE_API_REFERER,
@@ -88,7 +61,7 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         resp.raise_for_status()
     except Exception as e:
         logger.warning("fetch_pid_app_data request failed for pid=%s -> %s; skip", pid, e)
-        return []
+        raise
 
     try:
         data: dict = resp.json()
@@ -104,7 +77,7 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
             ct,
             (resp.text or "")[:500],
         )
-        return []
+        raise
 
     rows = parse_app_data(data.get("data", [])) or []
     # 计算天数
@@ -137,108 +110,62 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str | None = None, end_date:
     )
     return rows
 
+def save_data_bulk(pid:str, date:str, rows: List[Dict]):
+    """批量保存数据"""
+    UserAppDataDAO.save_data_bulk(rows)
+    af_rows = []
+    for row in rows:
+            row['pid'] = pid
+            af_row = row.copy()
+            af_row['date'] = date
+            af_rows.append(af_row)
+    AfAppDataDAO.upsert_bulk_safe(af_rows)
+
 
 def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[Dict]:
     """获取最新数据并保存"""
     try:
         rows = fetch_by_pid(pid, app_id, date, date, aff_id)
-        af_rows = []
-        for row in rows:
-            row['pid'] = pid
-            af_row = row.copy()
-            af_row['date'] = date
-            af_rows.append(af_row)
-        UserAppDataDAO.save_data_bulk(rows)
-        # 只插入af数据中开始日期和结束日期相同的数据
-        AfAppDataDAO.upsert_bulk_safe(af_rows)
+        save_data_bulk(pid, date, rows)
+        return rows
     except Exception as e:
         logger.error(f"Failed to fetch and save data for pid={pid} app_id={app_id} aff_id={aff_id} date={date}: {e}")
-        return []
-    return rows
+        raise
 
 
-def try_get_and_save_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
-    """按日期动态缓存策略：
-
-    - 今天：最近 2 小时缓存命中则返回；否则实时查询并落库。
-    - 昨天：最近 4 小时缓存命中则返回；否则实时查询并落库。
-    - 前天及更早：优先返回该日期的最新缓存；若没有则实时查询并落库。
-    - 非单日查询：保持原先 2 小时缓存策略。
+def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
     """
-    fmt = "%Y-%m-%d"
-    within_minutes = 120  # 默认 2 小时
-    days_diff = None
-    try:
-        # 仅针对单日查询做差值判断
-        if start_date == end_date:
-            target_date = datetime.strptime(start_date, fmt).date()
-            today = datetime.now().date()
-            days_diff = (today - target_date).days
-    except Exception:
-        # 日期解析失败时，走默认缓存与实时查询逻辑
-        pass
-
-    # 构造 singleflight 键（同一 pid/app/day/aff）
-    sf_key = f"appdata|{pid}|{app_id}|{start_date}|{end_date}|{aff_id or ''}"
-    timeout_sec = int(CRAWLER.get('singleflight_timeout_seconds', 60))
-
-    if days_diff is not None and days_diff >= 2:
-        # 前天及更早：只用历史缓存；若没有，再进行一次受控抓取
-        cached_prev = UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id)
-        if cached_prev:
-            return cached_prev
-        is_leader, ev = _sf_begin(sf_key)
-        if is_leader:
-            try:
-                return fetch_and_save_data(pid, app_id, aff_id or '', start_date)
-            finally:
-                _sf_end(sf_key)
-        else:
-            # 等待首个线程完成，然后读取缓存
-            ev.wait(timeout=timeout_sec)
-            return UserAppDataDAO.get_rows_by_date(pid, app_id, start_date, end_date, aff_id) or []
-
-    # 昨天：扩大缓存窗口到 4 小时
-    if days_diff == 1:
-        within_minutes = 240
+    最近 3 小时缓存命中则返回；否则实时查询并落库。
+    """     
+    within_minutes = 180  # 默认 3 小时
 
     # 1. 先查 DB 缓存（包含 aff_id 过滤）
-    cached = UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, aff_id, within_minutes)
+    cached = UserAppDataDAO.get_recent_rows(pid, app_id, date, date, aff_id, within_minutes)
     if cached:
         return cached
 
-    # 2. 无缓存则实时查询（singleflight 防并发）
-    is_leader, ev = _sf_begin(sf_key)
-    if is_leader:
-        try:
-            return fetch_and_save_data(pid, app_id, aff_id or '', start_date)
-        finally:
-            _sf_end(sf_key)
-    else:
-        # 跟随者等待领导者写入缓存，再读取
-        ev.wait(timeout=timeout_sec)
-        after = UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, aff_id, within_minutes)
-        if after:
-            return after
-        # 若仍无缓存，进行轻微退避后再查一次（避免惊群）
-        time.sleep(random.uniform(0.3, 0.8))
-        return UserAppDataDAO.get_recent_rows(pid, app_id, start_date, end_date, aff_id, within_minutes) or []
+    # 2. 无缓存则实时查询
+    return fetch_and_save_data(pid, app_id, aff_id, date)
 
 
-def fetch_by_pid_and_offer_id(pid: str, app_id: str, offer_id: str | None = None, start_date: str = None, end_date: str = None, aff_id: str | None = None):
+def try_get_by_pid_and_offer_id(pid: str, app_id: str, aff_id: str, offer_id: str | None = None, date: str | None = None):
     """ 获取某个pid下的某个app的指定日期的数据 """
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+        
     rows = try_get_and_save_data(
-        pid, app_id, start_date, end_date, aff_id
+        pid, app_id, aff_id, date
     )
+
     if offer_id:
         rows = list(filter(lambda x: x["offer_id"] == offer_id, rows))
     return rows
 
 
-def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: str | None = None, offer_id: str | None = None,):
+def fetch_with_overall_report_counts(pid: str, app_id: str, date: str, aff_id: str, offer_id: str | None = None,):
     """返回指定 date 的 AF 数据与 overall_report_count 的 clicks/installation 以及 gap(af_clicks/clicks) 百分比。"""
     # AF侧按单日查询
-    rows = fetch_by_pid_and_offer_id(pid, app_id, offer_id, date, date, aff_id)
+    rows = try_get_by_pid_and_offer_id(pid, app_id, aff_id, offer_id, date)
 
     # 仅保留每个 (offer_id, aff_id, date) 的最新快照（当来源是缓存时，数据已按 created_at DESC 排序）
     latest_rows: List[Dict] = []

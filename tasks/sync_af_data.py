@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 
 from model.aff import AffDAO, OfferAffDAO
+from model.user_app_data import UserAppDataDAO
 
 """按用户分组的多线程数据同步 - 修复版"""
 
@@ -16,35 +17,25 @@ from model.offer import OfferDAO
 from services.data_service import try_get_and_save_data
 from datetime import datetime
 import logging
-
-logger = logging.getLogger(__name__)
-from config.settings import CRAWLER
 from core.logger import setup_logging  # noqa
 
+logger = logging.getLogger(__name__)
 
-def create_task_data(pid:str, params:list[dict]) -> str:
+
+def create_task_data(pid:str,date:str, app_affs_map:dict) -> str:
     import json
-    params_data = []
-    for param in params:
-        params_data.append({
-            "pid": pid,
-            "app_id": param.get("app_id"),
-            "aff_id": param.get("aff_id"),
-            "date": param.get("date"),
-        })
+    data = {
+        "pid": pid,
+        "date": date,
+        "app_affs_map": app_affs_map,
+    }
+    return json.dumps(data)
 
-    return json.dumps(params_data)
-
-def parse_task_data(task_data: Any) -> Dict:
+def parse_task_data(task_data: str) -> Dict:
     
     import json
     try:
-        if isinstance(task_data, dict):
-            return task_data
-        if isinstance(task_data, (bytes, bytearray)):
-            task_data = task_data.decode('utf-8', errors='ignore')
-        if isinstance(task_data, str):
-            return json.loads(task_data)
+        return json.loads(task_data)
     except Exception as e:
         logger.warning("Invalid task_data format: %s", e)
     return {}
@@ -52,7 +43,7 @@ def parse_task_data(task_data: Any) -> Dict:
 def create_task(date:str) -> None:
     """
     创建应用数据任务
-    根据配置的静态代理 pid 并根据 活跃的offer创建内部 djj渠道的af数据任务
+    根据配置的静态代理 pid 并根据 活跃的offer 的 djj渠道的af数据任务
     """
     TaskDAO.init_table()
 
@@ -83,29 +74,26 @@ def create_task(date:str) -> None:
         if not offers:
             logger.info(f"create task for pid={pid} with no offers.")
             continue
-        app_aff_map = {}
+        app_affs_map = {}
 
         for offer in offers:
             offer_id = int(offer.get("id"))
             app_id = offer.get("app_id")
             if not app_id:
                 continue
-            if app_id not in app_aff_map:
-                app_aff_map[app_id] = []
+            if app_id not in app_affs_map:
+                app_affs_map[app_id] = []
             affs = offer_aff_map.get(offer_id, [])
-            app_aff_map[app_id].extend([aff.get("aff_id") for aff in affs])
-
-        for app_id, aff_ids in app_aff_map.items():
-            aff_ids = list(set(aff_ids))
-            for aff_id in aff_ids:
-                aff = aff_map.get(aff_id)
-                if not aff:
-                    continue
-                task = {
-                    'task_data': create_task_data('app_data', pid, app_id, aff_id, date),
-                    'next_run_at': now_date_time
-                }
-                task_list.append(task)
+            app_affs_map[app_id].extend([aff.get("aff_id") for aff in affs if aff_map.get(aff.get("aff_id"))])
+        
+        max_retry_count = sum(len(affs) for affs in app_affs_map.values())
+        
+        task_list.append({
+            'max_retry_count': max_retry_count,
+            'task_type': 'sync_af_data',
+            'task_data': create_task_data(pid, date, app_affs_map),
+            'next_run_at': now_date_time
+        })
 
     logger.info(f"create {len(task_list)} tasks.")
     TaskDAO.add_tasks(task_list)
@@ -117,99 +105,40 @@ def create_now_task():
     create_task(now_date)
 
 
-def handle(tasks:dict):
+def handle(task_data_str:str):
     """执行任务"""
 
-    # 获取线程池配置
-    max_workers = CRAWLER["threads_per_process"]
-    logger.info("使用线程数: %d", max_workers)
-
-    import queue
-
-    # 用户任务处理函数
-    def process_tasks(task_queue: queue.Queue):
-        finished_tasks_total = []
-        while True:
-            try:
-                group_tasks = task_queue.get(timeout=1)
-                if not group_tasks:
-                    task_queue.task_done()
-                    continue
-                pid = group_tasks[0].get("task_data")
-                pid = parse_task_data(pid).get("pid")
-                logger.info(f"process {len(group_tasks)} tasks for pid={pid}")
-                finished_tasks = []
-                for task in group_tasks:
-                    # 解析任务数据
-                    task_data = parse_task_data(task['task_data'])
-                    type = task_data.get('type')
-                    if type != 'app_data':
-                        continue
-                    pid = task_data.get('pid')
-                    app_id = task_data.get('app_id')
-                    aff_id = task_data.get('aff_id')
-                    date = task_data.get('date')
-                    ret = try_get_and_save_data(pid, app_id, date, date, aff_id)
-                    if ret and len(ret) > 0:
-                        logger.info(f"success save {len(ret)} rows for pid={pid} app_id={app_id} aff_id={aff_id} date={date}")
-                        finished_tasks.append(task)
-                finished_tasks_total.extend(finished_tasks)
-                logger.info(f"finish process {len(group_tasks)} tasks for pid={pid}")
-                task_queue.task_done()
-            except queue.Empty:
-                break
-            except Exception as e:
-                logger.error("处理任务时出错: %s", str(e))
-        return finished_tasks_total
-
-    # 创建任务队列
-    task_queue = queue.Queue()
-
-    # 将任务根据pid分组
-    pid_task_map = {}
-    for task in tasks:
-        task_data = parse_task_data(task['task_data'])
-        pid = task_data.get('pid')
-        if pid not in pid_task_map:
-            pid_task_map[pid] = []
-        pid_task_map[pid].append(task)
+    task_data = parse_task_data(task_data_str)
+    pid = task_data.get('pid')
+    date = task_data.get('date')
+    app_affs_map:dict = task_data.get('app_affs_map')
+    if not app_affs_map:
+        logger.warning(f"app_affs_map is empty for pid={pid} date={date}")
+        return False
     
-    # 将pid任务放入队列
-    for pid, tasks in pid_task_map.items():
-        task_queue.put(tasks)
+    # 数据库获取当前日期最近的更新数据
+    recent_data = UserAppDataDAO.get_recent_by_pid(pid, date, date, 120)
+    recent_key = [f"{pid}_{data.get('app_id')}_{data.get('aff_id')}" for data in recent_data]
+    recent_key_set = set[str](recent_key)
     
-    # 使用线程池处理任务队列
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        # 为每个线程分配任务处理器
-        futures = [pool.submit(process_tasks, task_queue) for _ in range(max_workers)]
-        # 等待所有任务完成
-        task_queue.join()
-        # 汇总成功任务，并从任务列表中移除（标记为完成）
-        finished_tasks_all = []
-        for f in futures:
-            try:
-                res = f.result()
-                if res:
-                    finished_tasks_all.extend(res)
-            except Exception as e:
-                logger.exception("任务线程执行异常: %s", e)
+    new_app_affs_map = app_affs_map.copy()
+    for app_id, aff_ids in app_affs_map.items():
+        for aff_id in aff_ids:
+            key = f"{pid}_{app_id}_{aff_id}"
+            if key in recent_key_set:
+                recent_key_set.remove(key)
+                new_app_affs_map[app_id].remove(aff_id)
+                if not new_app_affs_map[app_id]:
+                    del new_app_affs_map[app_id]
+                continue
 
-        if finished_tasks_all:
-            # 批量标记完成，避免逐条更新
-            task_ids = list({t.get('id') for t in finished_tasks_all if t.get('id')})
             try:
-                affected = TaskDAO.mark_done_batch(task_ids)
-                logger.info("本轮完成任务数: %d", affected)
+                try_get_and_save_data(pid, app_id, date, date, aff_id)
+                new_app_affs_map[app_id].remove(aff_id)
+                if not new_app_affs_map[app_id]:
+                    del new_app_affs_map[app_id]
             except Exception as e:
-                logger.exception("批量标记任务完成失败: ids=%s, error=%s", task_ids, e)
-            # 对未完成的任务增加重试次数（pending 状态）
-            try:
-                all_task_ids = list({t.get('id') for group in pid_task_map.values() for t in group if t.get('id')})
-                undone_ids = [tid for tid in all_task_ids if tid not in set(task_ids)]
-                if undone_ids:
-                    affected_retry = TaskDAO.mark_retry_batch(undone_ids)
-                    logger.info("本轮重试+1任务数: %d", affected_retry)
-            except Exception as e:
-                logger.exception("批量增加重试次数失败: error=%s", e)
+                logger.error(f"Error processing {key}: {e[:100]}")
+                continue
 
-    logger.info("所有任务处理完成")
+    return not new_app_affs_map, create_task_data(pid, date, new_app_affs_map)

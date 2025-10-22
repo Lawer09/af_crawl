@@ -14,7 +14,7 @@ from model.device_heartbeat import DeviceHeartbeatDAO
 from services import af_config_service
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
-from services.data_service import fetch_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data
+from services.data_service import try_get_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data
 from services.app_service import fetch_app_by_pid
 
 logger = logging.getLogger(__name__)
@@ -100,13 +100,12 @@ def get_user_app_data_by_pid(
 ):
     """通过 pid 获取账号信息后拉取用户 app 数据"""
     try:
-        rows = fetch_by_pid_and_offer_id(
+        rows = try_get_by_pid_and_offer_id(
             pid=pid,
             app_id=app_id,
             aff_id=aff_id,
             offer_id=offer_id,
-            start_date=date,
-            end_date=date,
+            date=date
         )
         
         return {"status": "success", "data": rows}

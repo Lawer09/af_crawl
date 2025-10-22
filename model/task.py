@@ -50,6 +50,14 @@ class TaskDAO:
         mysql_pool.execute(sql, params)
     
     @classmethod
+    def update_task(cls, task:dict):
+        """更新任务状态"""
+        
+        
+
+        mysql_pool.execute(sql, params)
+
+    @classmethod
     def get_task(cls, task_id: int) -> Optional[dict]:
         """根据任务ID获取任务详情"""
         sql = f"SELECT * FROM {cls.TABLE} WHERE id=%s"

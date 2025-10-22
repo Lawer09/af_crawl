@@ -40,10 +40,10 @@ class AffDAO:
 
     @classmethod
     def get_ddj_list(cls) -> List[Dict]:
-        """查询内部非虚拟 DDJ 渠道（live=1 AND own>1 AND tag='1'）。"""
+        """查询内部非虚拟 DDJ 渠道（live=1 AND is_ddj = 1）。"""
         sql = (
             f"SELECT id, name, live, own, tag "
-            f"FROM {cls.TABLE} WHERE live = 1 AND own > 1 AND tag = '1'"
+            f"FROM {cls.TABLE} WHERE live = 1 AND is_ddj = 1"
         )
         try:
             return mysql_pool.select(sql)

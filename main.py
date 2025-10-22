@@ -79,7 +79,7 @@ def _parse_args():
     p_status.add_argument("--master-host", default="localhost", help="主节点地址")
     p_status.add_argument("--master-port", type=int, default=7989, help="主节点端口")
 
-    sub.add_parser("task", help="本地任务处理（非分布式）")
+    sub.add_parser("task", help="本地任务处理")
     sub.add_parser("create_today_tasks", help="创建今日的应用数据任务")
 
     return parser.parse_args()
@@ -161,7 +161,6 @@ if __name__ == "__main__":
     
     elif args.command == "task":
         from tasks import task_manager
-        logger.info("=== task_manager start ===")
         task_manager.run()
 
     elif args.command == "create_today_tasks":

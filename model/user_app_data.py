@@ -52,6 +52,21 @@ class UserAppDataDAO:
         mysql_pool.executemany(sql, params)
 
     @classmethod
+    def get_recent_by_pid(cls, pid: str, date: str, within_minutes: int = 60) -> List[Dict]: 
+        """查询在最近 within_minutes 分钟内生成的缓存数据。
+        精确匹配 pid、date。
+        """
+        cls.init_table()
+        sql = f"""
+        SELECT username, pid, app_id, offer_id, aff_id, af_clicks, af_installs, start_date, end_date, days, created_at
+        FROM {cls.TABLE}
+        WHERE pid = %s AND start_date = %s AND end_date = %s
+          AND created_at >= NOW() - INTERVAL %s MINUTE
+        """
+        rows = mysql_pool.select(sql, (pid, date, date, within_minutes))
+        return rows or []
+
+    @classmethod
     def get_recent_rows(cls, pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None, within_minutes: int = 60) -> List[Dict]: 
         """查询在最近 within_minutes 分钟内生成的缓存数据。
         精确匹配 pid、app_id、start_date、end_date。
