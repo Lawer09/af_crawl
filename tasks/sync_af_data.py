@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 
 from model.aff import AffDAO, OfferAffDAO
 from model.user_app_data import UserAppDataDAO
@@ -9,13 +8,11 @@ from services import data_service
 
 import logging
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Tuple, Any, Optional
 
 from model.user import UserProxyDAO
 from model.task import TaskDAO
 from model.offer import OfferDAO
-from services.data_service import try_get_and_save_data
 from datetime import datetime
 import logging
 from core.logger import setup_logging  # noqa

@@ -12,8 +12,8 @@ def run():
     """运行任务"""
     logger.info("=== task_manager start ===")
     # 获取线程池配置
-    max_workers = CRAWLER["threads_per_process"]
-    logger.info("使用线程数: %d", max_workers)
+    # max_workers = CRAWLER["threads_per_process"]
+    # logger.info("使用线程数: %d", max_workers)
 
     while True:
         # 获取任务
