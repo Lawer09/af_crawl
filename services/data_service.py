@@ -283,7 +283,7 @@ def update_daily_data():
                 time.sleep(random.uniform(3.5, 6.5))
                 try:
                     logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, aff_id={aff_id}")
-                    rows = try_get_and_save_data(pid, app_id, target_date, target_date, aff_id=aff_id)
+                    rows = try_get_and_save_data(pid, app_id, target_date, aff_id=aff_id)
                     if rows:
                         total_success += 1
                         pid_success += 1

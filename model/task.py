@@ -53,7 +53,12 @@ class TaskDAO:
     def update_task(cls, task:dict):
         """更新任务状态"""
         
-        
+        sql = f"""
+        UPDATE {cls.TABLE}
+        SET task_data=%s, status=%s, next_run_at=%s, retry=%s, updated_at=NOW()
+        WHERE id=%s
+        """
+        params = (task.get('task_data'), task.get('status'), task.get('next_run_at'), task.get('retry'), task.get('id'))
 
         mysql_pool.execute(sql, params)
 

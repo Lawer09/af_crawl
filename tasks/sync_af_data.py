@@ -133,12 +133,12 @@ def handle(task_data_str:str):
                 continue
 
             try:
-                try_get_and_save_data(pid, app_id, date, date, aff_id)
+                try_get_and_save_data(pid, app_id, date, aff_id)
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
             except Exception as e:
-                logger.error(f"Error processing {key}: {e[:100]}")
+                logger.error(f"Error processing {key}: {e}")
                 continue
 
     return not new_app_affs_map, create_task_data(pid, date, new_app_affs_map)
