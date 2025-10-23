@@ -123,13 +123,13 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str | None = None, end_date:
 
 def save_data_bulk(pid:str, date:str, rows: List[Dict]):
     """批量保存数据"""
-    UserAppDataDAO.save_data_bulk(rows)
     af_rows = []
     for row in rows:
             row['pid'] = pid
             af_row = row.copy()
             af_row['date'] = date
             af_rows.append(af_row)
+    UserAppDataDAO.save_data_bulk(rows)
     AfAppDataDAO.upsert_bulk_safe(af_rows)
 
 

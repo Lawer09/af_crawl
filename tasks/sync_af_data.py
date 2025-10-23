@@ -1,4 +1,5 @@
 from __future__ import annotations
+import time
 
 from model.aff import AffDAO, OfferAffDAO
 from model.user_app_data import UserAppDataDAO
@@ -135,6 +136,7 @@ def handle(task_data_str:str):
 
             try:
                 rows = data_service.fetch_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
+                time.sleep(3)
                 logger.info(f"新数据已保存 pid={pid} app_id={app_id} aff_id={aff_id} rows={len(rows)}")
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
