@@ -98,6 +98,7 @@ def create_task(date:str) -> None:
             'task_data': create_task_data(pid, date, app_affs_map),
             'next_run_at': now_date_time
         })
+        logger.info(f"create task for pid={pid} success")
 
     logger.info(f"create {len(task_list)} tasks.")
     TaskDAO.add_tasks(task_list)
@@ -116,6 +117,7 @@ def handle(task_data_str:str):
     pid = task_data.get('pid')
     date = task_data.get('date')
     app_affs_map:dict = task_data.get('app_affs_map')
+    
     if not app_affs_map:
         logger.warning(f"app_affs_map is empty for pid={pid} date={date}")
         return False
@@ -128,12 +130,23 @@ def handle(task_data_str:str):
     recent_key_set = set[str](recent_key)
     
     new_app_affs_map = app_affs_map.copy()
+    aff_retry_count = new_app_affs_map.get('aff_retry_count', {})
     for app_id, aff_ids in app_affs_map.items():
         for aff_id in aff_ids:
             key = f"{pid}_{app_id}_{aff_id}"
+            retry_key = f"{app_id}_{aff_id}"
+            retry_count = aff_retry_count.get(retry_key, 0)
+
+            if retry_count > 0:
+                logger.info(f"{retry_key} 已重试次数={retry_count}，跳过")
+                new_app_affs_map[app_id].remove(aff_id)
+                if not new_app_affs_map[app_id]:
+                    del new_app_affs_map[app_id]
+                continue
+
             if key in recent_key_set:
                 recent_key_set.remove(key)
-                logger.info(f"新数据已存在 pid={pid} app_id={app_id} aff_id={aff_id}")
+                logger.info(f"数据已存在 pid={pid} app_id={app_id} aff_id={aff_id}")
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
@@ -142,12 +155,13 @@ def handle(task_data_str:str):
             try:
                 rows = data_service.fetch_and_save_data(pid=pid, app_id=app_id, date=date, aff_id=aff_id)
                 time.sleep(3)
-                logger.info(f"新数据已保存 pid={pid} app_id={app_id} aff_id={aff_id} rows={len(rows)}")
+                logger.info(f"数据已保存 pid={pid} app_id={app_id} aff_id={aff_id} rows={len(rows)}")
                 new_app_affs_map[app_id].remove(aff_id)
                 if not new_app_affs_map[app_id]:
                     del new_app_affs_map[app_id]
             except Exception as e:
                 logger.error(f"task fail processing {key}: {str(e)}")
+                aff_retry_count[retry_key] = retry_count + 1
                 return False, create_task_data(pid=pid, date=date, app_affs_map=new_app_affs_map)
 
     return not new_app_affs_map, create_task_data(pid=pid, date=date, app_affs_map=new_app_affs_map)
