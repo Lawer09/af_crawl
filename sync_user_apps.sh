@@ -28,6 +28,6 @@ elif [ -f "$ROOT_DIR/venv/Scripts/activate" ]; then
 fi
 
 echo "▶ 正在执行系统初始化"
-"$PYTHON_BIN" "mian.py sync_apps"
+"$PYTHON_BIN" "main.py sync_apps"
 
 echo "✅ 初始化完成"
