@@ -201,10 +201,12 @@ def fetch_csv_by_pid(pid:str, app_id:str, date:str):
         rows = parse_af_csv(resp.text) or []
         for row in rows:
             row["username"] = ""
-            row["date"] = date
+            row["start_date"] = date
+            row["end_date"] = date
             row["app_id"] = app_id
             row["days"] = 1
             row["pid"] = pid
+        logger.info(f"{pid} {app_id} {date} 数据， 共 {len(rows)} 条")
         return rows
     except Exception as e:
         logger.error(f"Failed to parse CSV data for pid={pid} app_id={app_id} date={date}: {e}")

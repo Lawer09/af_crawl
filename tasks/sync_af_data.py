@@ -185,6 +185,11 @@ def create_now_task():
     create_task(yesterday_str)
 
 
+def create_pid_now_task():
+    yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
+    logger.info(f"create task for date={yesterday_str}")
+    create_pid_task(yesterday_str)
+
 def pid_handle(task_data_str:str):
     """执行任务"""
 

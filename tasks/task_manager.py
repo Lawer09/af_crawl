@@ -25,7 +25,7 @@ def run():
 
         for task in tasks:
             if task["task_type"] == "sync_af_data":
-                success, task_data = sync_af_data.handle(task.get("task_data"))
+                success, task_data = sync_af_data.pid_handle(task.get("task_data"))
                 task["task_data"] = task_data
                 if success:
                     # 执行成功，更新任务状态

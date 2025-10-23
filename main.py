@@ -163,10 +163,10 @@ if __name__ == "__main__":
         from tasks import task_manager
         task_manager.run()
 
-    elif args.command == "create_today_tasks":
-        from tasks.sync_af_data import create_now_task
-        logger.info("=== create_today_tasks start ===")
-        create_now_task()
+    elif args.command == "create_tasks":
+        from tasks.sync_af_data import create_pid_now_task
+        logger.info("=== create_tasks start ===")
+        create_pid_now_task()
     else:
         logger.error("unknown command: %s", args.command)
         sys.exit(1)

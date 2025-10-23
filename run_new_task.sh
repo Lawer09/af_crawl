@@ -99,7 +99,7 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 # 后台启动 创建今日任务
-CMD="python $MAIN_SCRIPT create_today_tasks"
+CMD="python $MAIN_SCRIPT create_tasks"
 
 echo "[$(ts)] 启动命令: $CMD"
 nohup bash -c "exec $CMD" >> "$LOG_FILE" 2>&1 &
