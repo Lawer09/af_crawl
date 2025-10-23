@@ -18,7 +18,7 @@ class UserAppDAO:
         app_id VARCHAR(128) NOT NULL,
         app_name VARCHAR(255),
         platform ENUM('android','ios') DEFAULT 'android',
-        timezone VARCHAR(64),
+        timezone VARCHAR(64) DEFAULT 'UTC',
         user_type_id VARCHAR(64),
         app_status TINYINT DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

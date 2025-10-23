@@ -66,6 +66,7 @@ def add_pid_app_data_task(pid: str, date: str):
         logger.error(f"create task for pid={pid} fail: {str(e)}")
         raise
 
+
 def create_pid_task(date:str) -> None:
     """
     创建应用数据任务, csv 数据
@@ -90,8 +91,9 @@ def create_pid_task(date:str) -> None:
         except Exception as e:
             logger.error(f"add_pid_app_data_task fail: {str(e)}")
 
+
 def create_pid_now_task():
-    """创建应用数据任务, csv 数据, 基于当前日期"""
+    """创建应用数据任务, csv 数据, 昨天日期"""
     from datetime import datetime, timedelta
 
     yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")

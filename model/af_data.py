@@ -50,6 +50,36 @@ class AfAppDataDAO:
 
     TABLE = "af_data"
 
+    CREATE_SQL = f"""
+    CREATE TABLE IF NOT EXISTS {TABLE} (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        offer_id BIGINT NOT NULL,
+        aff_id VARCHAR(64) NOT NULL,
+        clicks INT NOT NULL DEFAULT 0,
+        installs INT NOT NULL DEFAULT 0,
+        app_id VARCHAR(128) NOT NULL,
+        pid VARCHAR(64) NOT NULL,
+        `date` DATE NOT NULL,
+        timezone VARCHAR(64) DEFAULT NULL,
+        created_at DATETIME DEFAULT NULL,
+        prt VARCHAR(64) DEFAULT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_app_pid_offer_aff_date (app_id, pid, offer_id, aff_id, `date`),
+        KEY idx_date (`date`),
+        KEY idx_app_pid_date (app_id, pid, `date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+
+    @classmethod
+    def init_table(cls) -> None:
+        """初始化 af_data 表（若不存在则创建）"""
+        try:
+            report_mysql_pool.execute(cls.CREATE_SQL)
+            logger.info("Table %s initialized.", cls.TABLE)
+        except Exception as e:
+            logger.exception("Init table %s failed: %s", cls.TABLE, e)
+            raise
+
     @staticmethod
     def upsert_bulk(items: List[Dict]) -> int:
         """使用 INSERT ... ON DUPLICATE KEY UPDATE 进行批量 upsert。

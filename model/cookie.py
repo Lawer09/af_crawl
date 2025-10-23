@@ -3,10 +3,7 @@ from typing import Optional, Dict, List
 from core.db import mysql_pool
 import json
 
-class CookieModel:
-    def __init__(self):
-        self.db = mysql_pool
-        self._init_table()
+class CookieDAO:
 
     TABLE = "af_user_cookies"
 
@@ -26,6 +23,10 @@ class CookieModel:
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """
+
+    def __init__(self):
+        self.db = mysql_pool
+        self._init_table()
 
     def _init_table(self):
         try:
@@ -192,4 +193,4 @@ class CookieModel:
             print(f"恢复Cookie到浏览器失败: {e}")
             return False
         
-cookie_model = CookieModel()
+cookie_model = CookieDAO()
