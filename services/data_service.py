@@ -15,6 +15,7 @@ from model.aff import OfferAffDAO, AffDAO
 from model.user import UserProxyDAO
 from utils.retry import request_with_retry
 from core.db import mysql_pool
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -144,19 +145,76 @@ def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[D
         raise
 
 
+_sf_guard = threading.RLock()
+_sf_events: Dict[str, threading.Event] = {}
+
+
+def _sf_key_for_query(pid: str, app_id: str, aff_id: str | None, date: str) -> str:
+    return f"appdata|{pid}|{app_id}|{date}|{aff_id or ''}"
+
+
+def _sf_begin(key: str) -> tuple[bool, threading.Event]:
+    with _sf_guard:
+        ev = _sf_events.get(key)
+        if ev is None:
+            ev = threading.Event()
+            _sf_events[key] = ev
+            return True, ev
+        return False, ev
+
+
+def _sf_end(key: str) -> None:
+    with _sf_guard:
+        ev = _sf_events.get(key)
+        if ev:
+            try:
+                ev.set()
+            finally:
+                _sf_events.pop(key, None)
+
 def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
     """
-    最近 3 小时缓存命中则返回；否则实时查询并落库。
+    最近 3 小时缓存命中则返回；否则在 singleflight 并发控制下查询并落库。
     """
     within_minutes = 180  # 默认 3 小时
 
-    # 1. 先查 DB 缓存（包含 aff_id 过滤）
-    cached = UserAppDataDAO.get_recent_rows(pid=pid, app_id=app_id, start_date=date, end_date=date, aff_id=aff_id, within_minutes=within_minutes)
+    # 1) 首次读取缓存（避免无谓等待）
+    cached = UserAppDataDAO.get_recent_rows(
+        pid=pid, app_id=app_id, start_date=date, end_date=date, aff_id=aff_id, within_minutes=within_minutes
+    )
     if cached:
         return cached
 
-    # 2. 无缓存则实时查询
-    return fetch_and_save_data(pid=pid, app_id=app_id, aff_id=aff_id, date=date)
+    # 2) 单航道：同键仅一个线程抓取，其余等待后读缓存
+    sf_key = _sf_key_for_query(pid, app_id, aff_id, date)
+    leader, ev = _sf_begin(sf_key)
+    if leader:
+        try:
+            rows = fetch_and_save_data(pid=pid, app_id=app_id, aff_id=aff_id, date=date)
+            return rows
+        finally:
+            _sf_end(sf_key)
+    else:
+        # 跟随者等待领导者完成（有超时）
+        timeout = int(CRAWLER.get('singleflight_timeout_seconds', 60))
+        try:
+            ev.wait(timeout)
+        except Exception:
+            pass
+
+        # 3) 完成后再次读取缓存返回
+        cached2 = UserAppDataDAO.get_recent_rows(
+            pid=pid, app_id=app_id, start_date=date, end_date=date, aff_id=aff_id, within_minutes=within_minutes
+        )
+        if cached2:
+            return cached2
+
+        # 4) 轻微退避后再读一次，避免惊群
+        time.sleep(random.uniform(0.2, 0.6))
+        cached3 = UserAppDataDAO.get_recent_rows(
+            pid=pid, app_id=app_id, start_date=date, end_date=date, aff_id=aff_id, within_minutes=within_minutes
+        )
+        return cached3 or []
 
 
 def try_get_by_pid_and_offer_id(pid: str, app_id: str, aff_id: str, offer_id: str | None = None, date: str | None = None):
