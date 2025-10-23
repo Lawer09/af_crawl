@@ -168,6 +168,21 @@ class TaskDAO:
         )
 
     @classmethod
+    def fail_task_batch(cls, task_ids: List[int], retry_delay_sec: int) -> int:
+        """批量标记任务为失败，并增加重试次数"""
+        if not task_ids:
+            return 0
+        try:
+            placeholders = ','.join(['%s'] * len(task_ids))
+            sql = f"UPDATE {cls.TABLE} SET status='failed', retry=retry+1, next_run_at=NOW()+INTERVAL %s SECOND WHERE id IN ({placeholders})"
+            params = (retry_delay_sec, *task_ids)
+            affected = mysql_pool.execute(sql, params)
+            return affected
+        except Exception as e:
+            logger.exception(f"fail_task_batch error: ids={task_ids}, error={e}")
+            return 0
+
+    @classmethod
     def reset_all(cls):
         mysql_pool.execute(f"DELETE FROM {cls.TABLE}")
 

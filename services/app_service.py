@@ -177,6 +177,7 @@ def fetch_pid_apps(pid: str) -> List[Dict]:
         })
     return apps
 
+
 def update_user_apps():
     """更新pid的app（批量，带代理与UA）"""
     user_proxies = UserProxyDAO.get_enable()
@@ -229,3 +230,4 @@ def update_user_apps():
             # 单用户异常不影响整批次，记录并跳过
             logger.exception("update_daily_apps user failed: pid=%s username=%s -> %s", pid, user.get("email"), e)
             continue
+    logger.info("同步app结束")
