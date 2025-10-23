@@ -161,9 +161,9 @@ if __name__ == "__main__":
         task_manager.run()
 
     elif args.command == "create_tasks":
-        from tasks.sync_af_data import create_pid_now_task
+        from services import task_service
         logger.info("=== create_tasks start ===")
-        create_pid_now_task()
+        task_service.create_pid_now_task()
     
     elif args.command == "init_data":
         from scripts import system_init
