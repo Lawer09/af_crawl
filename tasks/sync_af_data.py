@@ -132,7 +132,7 @@ def create_pid_task(date:str) -> None:
         return
 
     pids = [p.get("pid") for p in user_proxies if p.get("pid")]
-    logger.info(f"create task for {len(pids)} pids.")
+    logger.info(f"create pid task for {len(pids)} pids.")
 
     # pid下对应的所有可用的offer数据
     pid_offer_map = OfferDAO.get_list_by_pids_group_pid(pids)
@@ -165,12 +165,11 @@ def create_pid_task(date:str) -> None:
             # 每个渠道有一次重试机会
             max_retry_count = sum(len(affs) for affs in app_affs_map.values())
             
-            TaskDAO.add_task({
-                'max_retry_count': max_retry_count,
-                'task_type': 'sync_af_data',
-                'task_data': create_csv_task_data(pid, date, sys_app_id_set),
-                'next_run_at': now_date_time
-            })
+            TaskDAO.add_task(task_type='sync_af_data',
+                task_data=create_csv_task_data(pid, date, sys_app_id_set),
+                next_run_at=now_date_time,
+                max_retry_count=max_retry_count
+            )
             logger.info(f"create task for pid={pid} success")
         except Exception as e:
             logger.error(f"create task for pid={pid} fail: {str(e)}")
