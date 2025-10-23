@@ -177,7 +177,7 @@ def fetch_pid_apps(pid: str) -> List[Dict]:
         })
     return apps
 
-def update_daily_apps():
+def update_user_apps():
     """更新pid的app（批量，带代理与UA）"""
     user_proxies = UserProxyDAO.get_enable()
     if not user_proxies:

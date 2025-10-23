@@ -106,14 +106,9 @@ if __name__ == "__main__":
     _print_startup_info()
 
     if args.command == "sync_apps":
-        from tasks.sync_user_apps import run as sync_apps_run
+        from services import app_service
         logger.info("=== sync_apps start ===")
-        sync_apps_run()
-
-    elif args.command == "sync_data":
-        from tasks.sync_app_data import run as sync_data_run
-        logger.info("=== sync_data start days=%d ===", args.days)
-        sync_data_run(days=args.days)
+        app_service.update_user_apps()
 
     elif args.command == "web":
         from web_app import app

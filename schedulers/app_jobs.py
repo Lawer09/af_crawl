@@ -4,7 +4,7 @@ import logging
 import time
 import threading
 
-from services.app_service import update_daily_apps
+from services.app_service import update_user_apps
 from services.data_service import update_daily_data
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ def start_update_apps_scheduler(interval_minutes: int = 60):
     def _runner():
         while True:
             try:
-                update_daily_apps()
+                update_user_apps()
             except Exception:
                 logger.exception("update_daily_apps scheduled run failed")
             time.sleep(interval_minutes * 60)
