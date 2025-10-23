@@ -202,6 +202,7 @@ def fetch_csv_by_pid(pid:str, app_id:str, date:str):
         for row in rows:
             row["username"] = ""
             row["date"] = date
+            row["app_id"] = app_id
             row["days"] = 1
             row["pid"] = pid
         return rows
