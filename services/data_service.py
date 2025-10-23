@@ -288,7 +288,7 @@ def _sf_end(key: str) -> None:
             finally:
                 _sf_events.pop(key, None)
 
-def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
+def try_get_and_save_data(pid: str, app_id: str, date:str, aff_id: str|None = None):
     """
     最近 3 小时缓存命中则返回；否则在 singleflight 并发控制下查询并落库。
     """
@@ -307,7 +307,10 @@ def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
     if leader:
         try:
             rows = fetch_csv_data_and_save(pid=pid,app_id=app_id, date=date)
-            return [row for row in rows if row["aff_id"] == aff_id]
+            if aff_id:
+                return [row for row in rows if row["aff_id"] == aff_id]
+            else:
+                return rows
         finally:
             _sf_end(sf_key)
     else:

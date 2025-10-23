@@ -87,14 +87,19 @@ class UserAppDataDAO:
         精确匹配 pid、app_id、start_date、end_date。
         """
         cls.init_table()
-        sql = f"""
-        SELECT username, pid, app_id, offer_id, aff_id, af_clicks, af_installs, start_date, end_date, days, created_at
-        FROM {cls.TABLE}
-        WHERE pid = %s AND app_id = %s AND start_date = %s AND end_date = %s
-          AND aff_id = %s
-          AND created_at >= NOW() - INTERVAL %s MINUTE
-        """
-        rows = mysql_pool.select(sql, (pid, app_id, start_date, end_date, aff_id, within_minutes))
+        base_sql = [
+            f"SELECT username, pid, app_id, offer_id, aff_id, af_clicks, af_installs, start_date, end_date, days, created_at",
+            f"FROM {cls.TABLE}",
+            "WHERE pid = %s AND app_id = %s AND start_date = %s AND end_date = %s",
+        ]
+        params = [pid, app_id, start_date, end_date]
+        if aff_id is not None:
+            base_sql.append("AND aff_id = %s")
+            params.append(aff_id)
+        base_sql.append("AND created_at >= NOW() - INTERVAL %s MINUTE")
+        params.append(within_minutes)
+        sql = "\n".join(base_sql)
+        rows = mysql_pool.select(sql, tuple(params))
         return rows or []
 
     @classmethod
