@@ -70,38 +70,43 @@ def create_task(date:str) -> None:
     task_list = []
 
     for pid in pids:
-        offers = pid_offer_map.get(pid)
-        if not offers:
-            logger.info(f"create task for pid={pid} with no offers.")
-            continue
-        app_affs_map = {}
-
-        # 获取当前pid下的app
-        apps = app_service.fetch_pid_apps(pid)
-        app_id_set = set([app.get("app_id") for app in apps])
-        
-        for offer in offers:
-            offer_id = int(offer.get("id"))
-            app_id = offer.get("app_id")
-            if not app_id or app_id not in app_id_set:
+        try:
+            offers = pid_offer_map.get(pid)
+            if not offers:
+                logger.info(f"create task for pid={pid} with no offers.")
                 continue
-            if app_id not in app_affs_map:
-                app_affs_map[app_id] = []
-            affs = offer_aff_map.get(offer_id, [])
-            app_affs_map[app_id].extend([aff.get("aff_id") for aff in affs if aff_map.get(aff.get("aff_id"))])
-        
-        max_retry_count = sum(len(affs) for affs in app_affs_map.values())
-        
-        task_list.append({
-            'max_retry_count': max_retry_count,
-            'task_type': 'sync_af_data',
-            'task_data': create_task_data(pid, date, app_affs_map),
-            'next_run_at': now_date_time
-        })
-        logger.info(f"create task for pid={pid} success")
+            app_affs_map = {}
+
+            # 获取当前pid下的app
+            apps = app_service.fetch_pid_apps(pid)
+            # 一方面减少拉取次数，另一方面预热cookie
+            app_id_set = set([app.get("app_id") for app in apps])
+            
+            for offer in offers:
+                offer_id = int(offer.get("id"))
+                app_id = offer.get("app_id")
+                if not app_id or (app_id not in app_id_set):
+                    continue
+
+                if app_id not in app_affs_map:
+                    app_affs_map[app_id] = []
+                affs = offer_aff_map.get(offer_id, [])
+                app_affs_map[app_id].extend([aff.get("aff_id") for aff in affs if aff_map.get(aff.get("aff_id"))])
+            
+            max_retry_count = sum(len(affs) for affs in app_affs_map.values())
+            
+            TaskDAO.add_task({
+                'max_retry_count': max_retry_count,
+                'task_type': 'sync_af_data',
+                'task_data': create_task_data(pid, date, app_affs_map),
+                'next_run_at': now_date_time
+            })
+            logger.info(f"create task for pid={pid} success")
+        except Exception as e:
+            logger.error(f"create task for pid={pid} fail: {str(e)}")
 
     logger.info(f"create {len(task_list)} tasks.")
-    TaskDAO.add_tasks(task_list)
+    # TaskDAO.add_tasks(task_list)
 
 
 def create_now_task():
