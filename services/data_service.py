@@ -306,7 +306,7 @@ def try_get_and_save_data(pid: str, app_id: str, date:str, aff_id: str|None = No
     leader, ev = _sf_begin(sf_key)
     if leader:
         try:
-            rows = fetch_csv_data_and_save(pid=pid,app_id=app_id, date=date)
+            rows = fetch_csv_data_and_save(pid=pid, app_id=app_id, date=date)
             if aff_id:
                 return [row for row in rows if row["aff_id"] == aff_id]
             else:
@@ -342,7 +342,7 @@ def try_get_by_pid_and_offer_id(pid: str, app_id: str, aff_id: str, offer_id: st
         date = datetime.now().strftime("%Y-%m-%d")
         
     rows = try_get_and_save_data(
-        pid, app_id, aff_id, date
+        pid=pid, app_id=app_id, aff_id=aff_id, date=date
     )
 
     if offer_id:
@@ -471,7 +471,7 @@ def update_daily_data():
                 time.sleep(random.uniform(3.5, 6.5))
                 try:
                     logger.info(f"Start Daily update for pid={pid}, app_id={app_id}, aff_id={aff_id}")
-                    rows = try_get_and_save_data(pid, app_id, target_date, aff_id=aff_id)
+                    rows = try_get_and_save_data(pid=pid, app_id=app_id, date=target_date, aff_id=aff_id)
                     if rows:
                         total_success += 1
                         pid_success += 1
