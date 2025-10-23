@@ -3,7 +3,7 @@ import time
 
 from model.aff import AffDAO, OfferAffDAO
 from model.user_app_data import UserAppDataDAO
-from services import data_service
+from services import app_service, data_service
 
 """按用户分组的多线程数据同步 - 修复版"""
 
@@ -14,7 +14,7 @@ from typing import List, Dict, Tuple, Any, Optional
 from model.user import UserProxyDAO
 from model.task import TaskDAO
 from model.offer import OfferDAO
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from core.logger import setup_logging  # noqa
 
@@ -38,6 +38,7 @@ def parse_task_data(task_data: str) -> Dict:
     except Exception as e:
         logger.warning("Invalid task_data format: %s", e)
     return {}
+
 
 def create_task(date:str) -> None:
     """
@@ -75,10 +76,14 @@ def create_task(date:str) -> None:
             continue
         app_affs_map = {}
 
+        # 获取当前pid下的app
+        apps = app_service.fetch_pid_apps(pid)
+        app_id_set = set([app.get("app_id") for app in apps])
+        
         for offer in offers:
             offer_id = int(offer.get("id"))
             app_id = offer.get("app_id")
-            if not app_id:
+            if not app_id or app_id not in app_id_set:
                 continue
             if app_id not in app_affs_map:
                 app_affs_map[app_id] = []
@@ -99,9 +104,9 @@ def create_task(date:str) -> None:
 
 
 def create_now_task():
-    now_date = datetime.now().strftime("%Y-%m-%d")
-    logger.info(f"create task for date={now_date}")
-    create_task(now_date)
+    yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
+    logger.info(f"create task for date={yesterday_str}")
+    create_task(yesterday_str)
 
 
 def handle(task_data_str:str):

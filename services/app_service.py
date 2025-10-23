@@ -126,13 +126,11 @@ def fetch_app_by_pid(pid: str) -> List[Dict]:
 
 
 def fetch_pid_apps(pid: str) -> List[Dict]:
-    """基于 pid 获取 app 列表，使用按 pid 获取的会话，简化代理与UA流程。"""
+    """基于 pid 获取实时的 app 列表，使用按 pid 获取的会话，简化代理与UA流程。"""
     user = UserDAO.get_user_by_pid(pid)
     if not user:
         logger.error(f"User with pid={pid} not found.")
         return []
-
-    account_type = user.get("account_type")
 
     try:
         session = get_session_by_pid(pid)
@@ -140,10 +138,7 @@ def fetch_pid_apps(pid: str) -> List[Dict]:
         logger.error("Failed to init session for pid=%s: %s", pid, e)
         return []
 
-    if account_type == "pid":
-        url = cfg.HOME_APP_URL_PID
-    else:
-        url = cfg.HOME_APP_URL_PRT
+    url = cfg.HOME_APP_URL_PID
 
     headers = {
         "Referer": "https://hq1.appsflyer.com/apps/myapps",
@@ -163,36 +158,19 @@ def fetch_pid_apps(pid: str) -> List[Dict]:
     apps: List[Dict] = []
 
     username = user["email"]
-    if account_type == "pid":
-        if "data" not in data:
-            logger.error("unexpected response: %s", data)
-            return []
-        for app in data["data"]:
-            apps.append({
-                "username": username,
-                "app_id": app["app_id"],
-                "app_name": app.get("app_name"),
-                "platform": app["platform"],
-                "timezone": None,
-                "user_type_id": None,
-            })
-    else:
-        if "apps" not in data or "user" not in data:
-            logger.error("unexpected response: %s", data)
-            return []
-        prt_id = data["user"].get("agencyId")
-        for app in data["apps"]:
-            if app.get("deleted"):
-                continue
-            apps.append({
-                "username": username,
-                "app_id": app["id"],
-                "app_name": app["name"],
-                "platform": app["platform"],
-                "timezone": app["localization"].get("timezone"),
-                "user_type_id": prt_id,
-            })
+    if "data" not in data:
+        logger.error("unexpected response: %s", data)
+        return []
 
+    for app in data["data"]:
+        apps.append({
+            "username": username,
+            "app_id": app["app_id"],
+            "app_name": app.get("app_name"),
+            "platform": app["platform"],
+            "timezone": None,
+            "user_type_id": None,
+        })
     return apps
 
 
