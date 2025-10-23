@@ -27,7 +27,7 @@ elif [ -f "$ROOT_DIR/venv/Scripts/activate" ]; then
   source "$ROOT_DIR/venv/Scripts/activate"
 fi
 
-echo "▶ 正在执行系统初始化：scripts/system_init.py"
-"$PYTHON_BIN" "scripts/system_init.py"
+echo "▶ 正在执行系统初始化"
+"$PYTHON_BIN" "mian.py web"
 
 echo "✅ 初始化完成"

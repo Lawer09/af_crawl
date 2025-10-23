@@ -33,7 +33,7 @@ class CookieDAO:
             self.db.execute(self.CREATE_SQL)
         except Exception as e:
             print(f"[DB ERROR] create af_user_cookies failed: {e}")
-    
+
     def _serialize_cookies(self, cookies_list):
         """将Cookie列表序列化为JSON字符串"""
         return json.dumps(cookies_list, ensure_ascii=False)

@@ -82,6 +82,8 @@ def _parse_args():
     sub.add_parser("task", help="本地任务处理")
     sub.add_parser("create_tasks", help="创建应用数据任务")
 
+    sub.add_parser("init_data", help="创建应用数据任务")
+
     return parser.parse_args()
 
 
@@ -167,6 +169,10 @@ if __name__ == "__main__":
         from tasks.sync_af_data import create_pid_now_task
         logger.info("=== create_tasks start ===")
         create_pid_now_task()
+    
+    elif args.command == "init_data":
+        from scripts import system_init
+
     else:
         logger.error("unknown command: %s", args.command)
         sys.exit(1)
