@@ -1,31 +1,76 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
+set -o pipefail
 
-# Resolve repository root and move into it
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR"
+# 目录与文件
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$SCRIPT_DIR"
+MAIN_SCRIPT="main.py"
 
-# Allow override via env var; otherwise auto-detect python
-PYTHON_BIN="${PYTHON_BIN:-}"
-if [ -z "$PYTHON_BIN" ]; then
-  if command -v python >/dev/null 2>&1; then
-    PYTHON_BIN="python"
-  elif command -v python3 >/dev/null 2>&1; then
-    PYTHON_BIN="python3"
+# 时间戳
+ts() { date +"%Y-%m-%d %H:%M:%S"; }
+
+echo "[$(ts)] 开始"
+cd "$REPO_DIR" || { echo "[$(ts)] 无法进入目录 $REPO_DIR"; exit 1; }
+
+# 选择系统 Python（用于创建 venv）
+choose_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    echo "python3"
+  elif command -v python >/dev/null 2>&1; then
+    echo "python"
   else
-    echo "❌ Python 未找到，请安装或在环境变量中设置 PYTHON_BIN。"
+    echo ""
+  fi
+}
+
+PY_SYS_CMD=$(choose_python)
+if [ -z "$PY_SYS_CMD" ]; then
+  echo "[$(ts)] 未找到系统 Python，请安装 python 或 python3"
+  exit 1
+fi
+
+echo "[$(ts)] 系统 Python: $(command -v $PY_SYS_CMD) ($($PY_SYS_CMD --version))"
+
+# 创建并激活虚拟环境，安装依赖
+if [ ! -d "venv" ]; then
+  echo "[$(ts)] 创建虚拟环境..."
+  $PY_SYS_CMD -m venv venv || { echo "[$(ts)] 虚拟环境创建失败"; exit 1; }
+fi
+
+activate_venv() {
+  if [ -f "venv/bin/activate" ]; then
+    # POSIX/Linux
+    # shellcheck disable=SC1091
+    source venv/bin/activate
+  elif [ -f "venv/Scripts/activate" ]; then
+    # Windows Git Bash/WSL 场景
+    # shellcheck disable=SC1091
+    source venv/Scripts/activate
+  else
+    echo "[$(ts)] 找不到虚拟环境激活脚本"
     exit 1
   fi
+}
+
+echo "[$(ts)] 激活虚拟环境..."
+activate_venv
+
+echo "[$(ts)] 虚拟环境 Python: $(which python) ($(python --version))"
+
+if [ -f "requirements.txt" ]; then
+  echo "[$(ts)] 安装依赖..."
+  python -m pip install --upgrade pip || true
+  python -m pip install -r requirements.txt || echo "[$(ts)] 依赖安装失败，继续尝试运行"
+else
+  echo "[$(ts)] 未找到 requirements.txt，跳过依赖安装"
 fi
 
-# Try to activate virtualenv if present
-if [ -f "$ROOT_DIR/venv/bin/activate" ]; then
-  # Linux/macOS
-  source "$ROOT_DIR/venv/bin/activate"
-elif [ -f "$ROOT_DIR/venv/Scripts/activate" ]; then
-  # Windows (Git Bash)
-  source "$ROOT_DIR/venv/Scripts/activate"
+# 检查主程序
+if [ ! -f "$MAIN_SCRIPT" ]; then
+  echo "[$(ts)] 主脚本 $MAIN_SCRIPT 不存在"
+  exit 1
 fi
 
-# 正确传递参数：分别传入脚本和子命令，避免把它们合并成一个路径
-"$PYTHON_BIN" "$ROOT_DIR/main.py" sync_apps
+echo "[$(ts)] 开始同步用户应用列表..."
+exec python "$REPO_DIR/$MAIN_SCRIPT" sync_apps
