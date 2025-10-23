@@ -40,7 +40,6 @@ class TaskDAO:
     @classmethod
     def add_task(cls, task_type:str, task_data:str, next_run_at:str, priority:int=0, execution_timeout:int=3600, max_retry_count:int=3):
         """添加任务"""
-        import json
         sql = f"""
         INSERT INTO {cls.TABLE}
             (task_type, task_data, next_run_at, priority, execution_timeout, max_retry_count)
