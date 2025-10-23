@@ -176,7 +176,6 @@ def get_user_app_data_gap_by_pid(
             offer_id=offer_id,
             date=date,
         )
-        
         return {"status": "success", "data": rows}
 
     except HTTPException:

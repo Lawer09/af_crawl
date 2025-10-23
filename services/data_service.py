@@ -237,6 +237,7 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str | None = None, end_date:
     )
     return rows
 
+
 def save_data_bulk(pid:str, date:str, rows: List[Dict]):
     """批量保存数据"""
     af_rows = []
@@ -305,8 +306,8 @@ def try_get_and_save_data(pid: str, app_id: str, aff_id: str, date:str):
     leader, ev = _sf_begin(sf_key)
     if leader:
         try:
-            rows = fetch_and_save_data(pid=pid, app_id=app_id, aff_id=aff_id, date=date)
-            return rows
+            rows = fetch_csv_data_and_save(pid=pid,app_id=app_id, date=date)
+            return [row for row in rows if row["aff_id"] == aff_id]
         finally:
             _sf_end(sf_key)
     else:
