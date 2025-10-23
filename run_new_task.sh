@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 创建今日应用数据任务：激活虚拟环境并执行 main.py create_today_tasks
+# 创建今日应用数据任务：激活虚拟环境、关闭旧进程、后台启动 main.py create_today_tasks
 set -e
 set -o pipefail
 
@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR"
 MAIN_SCRIPT="main.py"
 LOG_FILE="$SCRIPT_DIR/run_new_task.log"
+PID_FILE="$SCRIPT_DIR/run_new_task.pid"
 
 # 时间戳
 ts() { date +"%Y-%m-%d %H:%M:%S"; }
@@ -75,20 +76,36 @@ if [ ! -f "$MAIN_SCRIPT" ]; then
   exit 1
 fi
 
-# 前台执行创建今日任务，并输出到日志
+# 关闭旧后台进程
+if [ -f "$PID_FILE" ]; then
+  OLD_PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" >/dev/null 2>&1; then
+    echo "[$(ts)] 检测到已有后台进程(PID=$OLD_PID)，先关闭..."
+    kill "$OLD_PID" >/dev/null 2>&1 || true
+    for i in $(seq 1 10); do
+      if kill -0 "$OLD_PID" >/dev/null 2>&1; then
+        sleep 1
+      else
+        break
+      fi
+    done
+    if kill -0 "$OLD_PID" >/dev/null 2>&1; then
+      echo "[$(ts)] 旧进程仍在，强制关闭..."
+      kill -9 "$OLD_PID" >/dev/null 2>&1 || true
+    fi
+    echo "[$(ts)] 已关闭旧进程: $OLD_PID"
+  fi
+  rm -f "$PID_FILE"
+fi
+
+# 后台启动 创建今日任务
 CMD="python $MAIN_SCRIPT create_today_tasks"
 
 echo "[$(ts)] 启动命令: $CMD"
-set +e
-$CMD 2>&1 | tee -a "$LOG_FILE"
-RET=$?
-set -e
+nohup bash -c "exec $CMD" >> "$LOG_FILE" 2>&1 &
+NEW_PID=$!
 
-echo "[$(ts)] 命令退出码: $RET"
-if [ $RET -eq 0 ]; then
-  echo "[$(ts)] 创建今日任务完成。"
-else
-  echo "[$(ts)] 创建今日任务执行失败，请查阅日志：$LOG_FILE"
-fi
-
-echo "[$(ts)] 如需开始处理队列中的任务，请运行 ./run_task.sh"
+echo "$NEW_PID" > "$PID_FILE"
+echo "[$(ts)] 程序已在后台启动，PID=$NEW_PID"
+echo "[$(ts)] 日志: tail -f $LOG_FILE"
+echo "[$(ts)] 停止: kill $NEW_PID"

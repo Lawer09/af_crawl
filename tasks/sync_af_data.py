@@ -93,6 +93,7 @@ def create_task(date:str) -> None:
                 affs = offer_aff_map.get(offer_id, [])
                 app_affs_map[app_id].extend([aff.get("aff_id") for aff in affs if aff_map.get(aff.get("aff_id"))])
             
+            # 每个渠道有一次重试机会
             max_retry_count = sum(len(affs) for affs in app_affs_map.values())
             
             TaskDAO.add_task({
