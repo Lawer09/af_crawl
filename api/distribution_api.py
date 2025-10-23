@@ -12,6 +12,7 @@ from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
 from services import af_config_service
+from services import data_service
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
 from services.data_service import try_get_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data
@@ -87,6 +88,29 @@ def set_pid_auth_prt(
     except Exception as e:
         logger.error(f"Error adding prt auth for pid {pid}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/user/app/data/new")
+def get_user_app_data_by_pid(
+    pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
+    app_id:str = Query(..., description="应用ID"),
+    date: str = Query(..., description="日期，YYYY-MM-DD"),
+):
+    """通过 pid 获取账号信息后拉取用户 app 数据"""
+    try:
+        rows = data_service.fetch_csv_data_and_save(
+            pid=pid,
+            app_id=app_id,
+            date=date
+        )
+        return {"status": "success", "data": rows}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching user app data by pid: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # 通过 pid 查询用户账号并获取数据（GET）

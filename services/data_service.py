@@ -34,6 +34,59 @@ def parse_app_data(data:List[Dict]) -> List[Dict]:
     
     return rows
 
+def parse_af_csv(text: str):
+    """
+    解析 AF CSV 文本，仅返回 adgroup, adgroup-id, clicks, installs 四列
+    """
+    import csv
+    from io import StringIO
+    reader = csv.reader(StringIO(text))
+    lines = [row for row in reader if row]  # 去掉空行
+    if not lines:
+        return []
+
+    header = [h.strip() for h in lines[0]]
+
+    def find_idx(candidates):
+        for name in candidates:
+            if name in header:
+                return header.index(name)
+        return None
+
+    idx_adgroup = find_idx(["adgroup", "adset"])
+    idx_adgroup_id = find_idx(["adgroup-id", "adset-id"])
+    idx_clicks = find_idx(["clicks"])
+    # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
+    idx_installs = find_idx([
+        "installs",
+        "installs appsflyer",
+        "installs-ua appsflyer",
+        "installs-retarget appsflyer",
+    ])
+
+    if None in (idx_adgroup, idx_adgroup_id, idx_clicks, idx_installs):
+        raise ValueError(f"CSV 字段缺失，header={header}")
+
+    out = []
+    max_idx = max(idx_adgroup, idx_adgroup_id, idx_clicks, idx_installs)
+    for row in lines[1:]:
+        if len(row) <= max_idx:
+            continue
+        adgroup = row[idx_adgroup].strip()
+        adgroup_id = row[idx_adgroup_id].strip()
+        if not adgroup or adgroup == "None":
+            continue
+        # 容错：空字符串当 0
+        clicks = int((row[idx_clicks] or "0").strip() or 0)
+        installs = int((row[idx_installs] or "0").strip() or 0)
+
+        out.append({
+            "offer_id": adgroup,
+            "aff_id": adgroup_id,
+            "af_clicks": clicks,
+            "af_installs": installs,
+        })
+    return out
 
 def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
     """基于 pid 获取某个 app 在指定日期范围的数据，使用按 pid 获取的会话简化流程。"""
@@ -105,6 +158,62 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         row["end_date"] = end_date
         row["days"] = days_cnt
 
+    return rows
+
+
+def fetch_csv_by_pid(pid:str, app_id:str, date:str):
+    try:
+        session = get_session_by_pid(pid)
+    except Exception as e:
+        logger.error(f"Failed to init session for pid={pid}: {e}")
+        raise
+
+    headers = {
+        "Referer": "https://hq1.appsflyer.com/unified-ltv/dashboard",
+        "Origin": "https://hq1.appsflyer.com",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+
+    payload = cfg.CSV_DATA_PARAM.copy()
+    payload["dates"] = {"start": date, "end": date}
+    payload["filters"]["app-id"] = [app_id]
+
+    try:
+        resp = request_with_retry(session, "POST", cfg.NEW_TABLE_API, json=payload, headers=headers, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        # 增强错误日志，便于诊断 400/403 等问题
+        try:
+            logger.error(
+                "fetch_csv_by_pid failed pid=%s app_id=%s status=%s url=%s",
+                pid,
+                app_id,
+                getattr(e.response, "status_code", None) if hasattr(e, "response") else None,
+                cfg.NEW_TABLE_API
+            )
+        except Exception:
+            logger.exception("fetch_csv_by_pid logging failed")
+        logger.warning("fetch_csv_by_pid request failed for pid=%s -> %s; skip", pid, e)
+        raise
+
+    try:
+        rows = parse_af_csv(resp.text) or []
+        for row in rows:
+            row["username"] = ""
+            row["date"] = date
+            row["days"] = 1
+            row["pid"] = pid
+        return rows
+    except Exception as e:
+        logger.error(f"Failed to parse CSV data for pid={pid} app_id={app_id} date={date}: {e}")
+        raise
+
+
+def fetch_csv_data_and_save(pid:str, app_id:str, date:str):
+    """获取某个用户下的某个pid的指定日期的数据并保存"""
+    rows = fetch_csv_by_pid(pid, app_id, date)
+    save_data_bulk(pid, date, rows)
     return rows
 
 
