@@ -27,7 +27,5 @@ elif [ -f "$ROOT_DIR/venv/Scripts/activate" ]; then
   source "$ROOT_DIR/venv/Scripts/activate"
 fi
 
-echo "▶ 正在执行系统初始化"
-"$PYTHON_BIN" "main.py sync_apps"
-
-echo "✅ 初始化完成"
+# 正确传递参数：分别传入脚本和子命令，避免把它们合并成一个路径
+"$PYTHON_BIN" "$ROOT_DIR/main.py" sync_apps
