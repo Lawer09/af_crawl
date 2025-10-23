@@ -64,7 +64,14 @@ class UserAppDAO:
         cls.init_table()
         sql = f"SELECT * FROM {cls.TABLE} WHERE username=%s AND app_id=%s"
         return mysql_pool.select(sql, (username, app_id))
-
+    
+    @classmethod
+    def get_list_by_pid(cls, pid: str) -> List[Dict]:
+        """根据 pid 查询用户绑定的 app 列表"""
+        cls.init_table()
+        sql = f"SELECT * FROM {cls.TABLE} WHERE user_type_id=%s"
+        return mysql_pool.select(sql, (pid,))
+    
     @classmethod
     def get_recent_user_apps(cls, username: str, within_days: int = 1) -> List[Dict]:
         """查询该用户在最近 within_days 天内更新的 app 列表（使用 updated_at）。"""

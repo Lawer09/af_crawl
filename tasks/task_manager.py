@@ -2,7 +2,6 @@
 
 import logging
 import time
-from config.settings import CRAWLER
 from model.task import TaskDAO
 from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
@@ -25,15 +24,22 @@ def run():
 
         for task in tasks:
             if task["task_type"] == "sync_af_data":
-                success, task_data = sync_af_data.pid_handle(task.get("task_data"))
-                task["task_data"] = task_data
+                try:
+                    success, task_data = sync_af_data.pid_handle(task.get("task_data"))
+                except Exception as e:
+                    logger.error(f"sync_af_data.pid_handle fail: {str(e)}")
+                    TaskDAO.fail_task(task["id"])
+                    continue
+
                 if success:
                     # 执行成功，更新任务状态
                     TaskDAO.mark_done(task["id"])
                 else:
                     # 执行失败，推迟1小时执行
-                    task["next_run_at"] = (datetime.now() + timedelta(hours=1)).isoformat()
-                    task["retry"] += 1
+                    task["task_data"] = task_data
+                    task["status"] = 'pending'
+                    task["next_run_at"] = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+                    task["retry"] += task.get("retry", 0) + 1
                     TaskDAO.update_task(task)
                     logger.info(f"更新任务 {task['id']} 下次执行时间为 {task['next_run_at']}")
         

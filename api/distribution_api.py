@@ -11,12 +11,12 @@ from model.device import DeviceDAO
 from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
-from services import af_config_service
+from services import af_config_service, task_service
 from services import data_service
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
 from services.data_service import try_get_by_pid_and_offer_id,fetch_with_overall_report_counts, sync_all_user_app_data_latest_to_af_data
-from services.app_service import fetch_app_by_pid
+from services.app_service import fetch_and_save_apps_by_pid
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +89,29 @@ def set_pid_auth_prt(
         logger.error(f"Error adding prt auth for pid {pid}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/task/app/data")
+def add_pid_app_data_task( 
+    pid: str = Query(..., description="用户PID"),
+    date: str = Query(..., description="日期，YYYY-MM-DD"),
+    ):
+    """添加pid任务, date 爬取日期"""
+    try:
+        task_service.add_pid_app_data_task(
+            pid=pid,
+            date=date
+        )
+        return {"status": "success", "data": ""}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching user app data by pid: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/user/app/data/new")
 def get_user_app_data_by_pid(
-    pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),
+    pid: str = Query(..., description="用户PID"),
     app_id:str = Query(..., description="应用ID"),
     date: str = Query(..., description="日期，YYYY-MM-DD"),
 ):
@@ -110,7 +129,6 @@ def get_user_app_data_by_pid(
     except Exception as e:
         logger.exception(f"Error fetching user app data by pid: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 # 通过 pid 查询用户账号并获取数据（GET）
@@ -174,7 +192,7 @@ def get_user_app_by_pid(
 ):
     """通过 pid 获取用户 app 列表"""
     try:
-        apps = fetch_app_by_pid(pid)
+        apps = fetch_and_save_apps_by_pid(pid)
         return {"status": "success", "data": apps}
     except Exception as e:
         logger.exception(f"Error fetching user app data by pid: {e}")

@@ -19,6 +19,7 @@ import threading
 
 logger = logging.getLogger(__name__)
 
+
 def parse_app_data(data:List[Dict]) -> List[Dict]:
     rows: List[Dict] = []
     for adset in data:
@@ -33,6 +34,7 @@ def parse_app_data(data:List[Dict]) -> List[Dict]:
         })
     
     return rows
+
 
 def parse_af_csv(text: str):
     """
@@ -87,6 +89,7 @@ def parse_af_csv(text: str):
             "af_installs": installs,
         })
     return out
+
 
 def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, aff_id: str | None = None):
     """基于 pid 获取某个 app 在指定日期范围的数据，使用按 pid 获取的会话简化流程。"""

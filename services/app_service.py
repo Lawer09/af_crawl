@@ -94,8 +94,11 @@ def fetch_apps(
             })
     return apps
 
+def save_apps(apps: List[Dict]):
+    """批量保存app列表到数据库"""
+    UserAppDAO.save_apps(apps)
 
-def fetch_app_by_pid(pid: str) -> List[Dict]:
+def fetch_and_save_apps_by_pid(pid: str) -> List[Dict]:
     """获取某个pid下的app列表并写入数据库，返回列表（带代理与UA）"""
     user = UserDAO.get_user_by_pid(pid)
     if not user:
@@ -121,7 +124,8 @@ def fetch_app_by_pid(pid: str) -> List[Dict]:
     apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
     for app in apps:
         app["user_type_id"] = pid
-    UserAppDAO.save_apps(apps)
+
+    save_apps(apps)
     return apps
 
 
@@ -168,11 +172,10 @@ def fetch_pid_apps(pid: str) -> List[Dict]:
             "app_id": app["app_id"],
             "app_name": app.get("app_name"),
             "platform": app["platform"],
-            "timezone": None,
-            "user_type_id": None,
+            "timezone": "UTC",
+            "user_type_id": pid,
         })
     return apps
-
 
 def update_daily_apps():
     """更新pid的app（批量，带代理与UA）"""

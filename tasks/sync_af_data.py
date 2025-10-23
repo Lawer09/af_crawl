@@ -3,13 +3,13 @@ import time
 
 from model.aff import AffDAO, OfferAffDAO
 from model.user_app_data import UserAppDataDAO
-from services import app_service, data_service
+from services import app_service, data_service, task_service
 
 """按用户分组的多线程数据同步 - 修复版"""
 
 import logging
 from datetime import datetime
-from typing import List, Dict, Tuple, Any, Optional
+from typing import Dict
 
 from model.user import UserProxyDAO
 from model.task import TaskDAO
@@ -75,7 +75,7 @@ def create_task(date:str) -> None:
     offer_aff_map = OfferAffDAO.get_list_by_offer_ids_group([int(o.get("id")) for offers in pid_offer_map.values() for o in offers])
     logger.info(f"offer_aff_map init")
     
-    now_date_time = datetime.now().isoformat()
+    now_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     task_list = []
 
@@ -119,74 +119,11 @@ def create_task(date:str) -> None:
     # TaskDAO.add_tasks(task_list)
 
 
-def create_pid_task(date:str) -> None:
-    """
-    创建应用数据任务, csv 数据
-    根据配置的静态代理 pid 并根据 活跃的offer 的 af数据任务
-    """
-    TaskDAO.init_table()
-
-    user_proxies = UserProxyDAO.get_enable()
-    if not user_proxies:
-        logger.error("No enable user proxy found for daily data update.")
-        return
-
-    pids = [p.get("pid") for p in user_proxies if p.get("pid")]
-    logger.info(f"create pid task for {len(pids)} pids.")
-
-    # pid下对应的所有可用的offer数据
-    pid_offer_map = OfferDAO.get_list_by_pids_group_pid(pids)
-    logger.info(f"pid_offer_map init")
-
-    now_date_time = datetime.now().isoformat()
-
-    task_list = []
-
-    for pid in pids:
-        try:
-            offers = pid_offer_map.get(pid)
-            if not offers:
-                logger.info(f"create task for pid={pid} with no offers.")
-                continue
-            app_affs_map = {}
-
-            # 获取当前pid下的app
-            apps = app_service.fetch_pid_apps(pid)
-            # 一方面减少拉取次数，另一方面预热cookie
-            app_id_set = set([app.get("app_id") for app in apps])
-            
-            sys_app_id_set = set()
-            for offer in offers:
-                app_id = offer.get("app_id")
-                if not app_id or (app_id not in app_id_set):
-                    continue
-                sys_app_id_set.add(app_id)
-            
-            # 每个渠道有一次重试机会
-            max_retry_count = sum(len(affs) for affs in app_affs_map.values())
-            
-            TaskDAO.add_task(task_type='sync_af_data',
-                task_data=create_csv_task_data(pid, date, sys_app_id_set),
-                next_run_at=now_date_time,
-                max_retry_count=max_retry_count
-            )
-            logger.info(f"create task for pid={pid} success")
-        except Exception as e:
-            logger.error(f"create task for pid={pid} fail: {str(e)}")
-
-    logger.info(f"create {len(task_list)} tasks.")
-
-
 def create_now_task():
     yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
     logger.info(f"create task for date={yesterday_str}")
     create_task(yesterday_str)
 
-
-def create_pid_now_task():
-    yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
-    logger.info(f"create task for date={yesterday_str}")
-    create_pid_task(yesterday_str)
 
 def pid_handle(task_data_str:str):
     """执行任务"""
@@ -198,7 +135,7 @@ def pid_handle(task_data_str:str):
     
     if not app_ids:
         logger.warning(f"app_ids is empty for pid={pid} date={date}")
-        return False
+        return True, task_data_str
     
     logger.info(f"开始任务 pid={pid} date={date}")
     
@@ -206,28 +143,23 @@ def pid_handle(task_data_str:str):
     app_retry_count = task_data.get('app_retry_count', {})
     for app_id in app_ids:
         retry_count = app_retry_count.get(app_id, 0)
-        if retry_count > 0:
+        if retry_count > 1:
             logger.info(f"{app_id} 已重试次数={retry_count}，跳过")
-            new_app_ids[app_id].remove(app_id)
-            if not new_app_ids[app_id]:
-                del new_app_ids[app_id]
+            new_app_ids.remove(app_id)
             continue
         
         try:
             rows = data_service.fetch_csv_by_pid(pid=pid, app_id=app_id, date=date)
-            data_service.save_data_bulk(rows)
+            data_service.save_data_bulk(pid=pid, date=date, rows=rows)
             time.sleep(3)
             logger.info(f"数据已保存 pid={pid} app_id={app_id} rows={len(rows)}")
-            new_app_ids[app_id].remove(app_id)
-            if not new_app_ids[app_id]:
-                del new_app_ids[app_id]
+            new_app_ids.remove(app_id)
         except Exception as e:
-            logger.error(f"task fail processing {key}: {str(e)}")
+            logger.error(f"task fail processing {app_id}: {str(e)}")
             app_retry_count[app_id] = retry_count + 1
-            return False, create_task_data(pid=pid, date=date, app_ids=new_app_ids)
+            return False, task_service.create_csv_task_data(pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count)
 
-    return not new_app_ids, create_task_data(pid=pid, date=date, app_ids=new_app_ids)
-
+    return not new_app_ids, task_service.create_csv_task_data(pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count)
 
 
 def handle(task_data_str:str):
