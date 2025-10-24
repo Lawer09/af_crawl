@@ -2,7 +2,10 @@ from typing import List, Dict
 from core.db import report_mysql_pool
 
 import logging
+import time
+import os
 logger = logging.getLogger(__name__)
+_SLOW_SEC = float(os.getenv("MYSQL_SLOW_QUERY_SECONDS", "5"))
 
 class AfDataDAO:
 
@@ -229,17 +232,56 @@ class AfAppDataDAO:
         conn = report_mysql_pool.get_conn()
         cursor = conn.cursor()
         try:
+            # 设置行锁等待阈值，避免长时间等待
             try:
-                # 批次级建议锁，减少并发批次之间的冲突
+                lock_wait = int(os.getenv("MYSQL_LOCK_WAIT_SECONDS", "12"))
+            except Exception:
+                lock_wait = 12
+            try:
+                cursor.execute(f"SET SESSION innodb_lock_wait_timeout = {lock_wait}")
+            except Exception:
+                logger.debug("SET innodb_lock_wait_timeout unsupported; skip setting")
+
+            # 批次级建议锁，减少并发批次之间的冲突
+            t_lock = time.perf_counter()
+            try:
                 cursor.execute("SELECT GET_LOCK(%s, %s)", ("af_data_bulk", lock_timeout))
+                try:
+                    ret = cursor.fetchone()
+                    got = int(ret[0]) if ret and len(ret) > 0 else -1
+                except Exception:
+                    got = -1
+                lock_elapsed = time.perf_counter() - t_lock
+                logger.info("AfAppDataDAO.upsert_bulk_safe GET_LOCK elapsed=%.2fs result=%s", lock_elapsed, got)
+                if lock_elapsed > _SLOW_SEC:
+                    logger.warning("AfAppDataDAO.upsert_bulk_safe GET_LOCK slow: %.2fs", lock_elapsed)
             except Exception:
                 logger.debug("GET_LOCK unsupported; proceed without bulk advisory lock")
+
             # 单事务：先 UPDATE，再条件 INSERT
+            logger.info("AfAppDataDAO.upsert_bulk_safe UPDATE start rows=%d", len(values))
+            t_upd = time.perf_counter()
             cursor.execute(update_sql, tuple(params))
             updated_count = cursor.rowcount
+            upd_elapsed = time.perf_counter() - t_upd
+            logger.info("AfAppDataDAO.upsert_bulk_safe UPDATE done in %.2fs updated=%d", upd_elapsed, int(updated_count or 0))
+            if upd_elapsed > _SLOW_SEC:
+                logger.warning("AfAppDataDAO.upsert_bulk_safe UPDATE slow: %.2fs updated=%d", upd_elapsed, int(updated_count or 0))
+
+            logger.info("AfAppDataDAO.upsert_bulk_safe INSERT start rows=%d", len(values))
+            t_ins = time.perf_counter()
             cursor.execute(insert_sql, tuple(params))
             inserted_count = cursor.rowcount
+            ins_elapsed = time.perf_counter() - t_ins
+            logger.info("AfAppDataDAO.upsert_bulk_safe INSERT done in %.2fs inserted=%d", ins_elapsed, int(inserted_count or 0))
+            if ins_elapsed > _SLOW_SEC:
+                logger.warning("AfAppDataDAO.upsert_bulk_safe INSERT slow: %.2fs inserted=%d", ins_elapsed, int(inserted_count or 0))
+
+            t_commit = time.perf_counter()
             conn.commit()
+            commit_elapsed = time.perf_counter() - t_commit
+            if commit_elapsed > _SLOW_SEC:
+                logger.warning("AfAppDataDAO.upsert_bulk_safe COMMIT slow: %.2fs", commit_elapsed)
             return int(updated_count or 0) + int(inserted_count or 0)
         except Exception as e:
                 conn.rollback()
