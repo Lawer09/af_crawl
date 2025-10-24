@@ -137,9 +137,19 @@ def test_all_proxy_stability(
     attempts: int = Query(10, description="测试次数"),
     test_url: str = Query("https://ipinfo.io", description="测试URL"),
     timeout: int = Query(3, description="超时时间（秒）"),
+    pid: Optional[str] = Query(None, description="用户PID（可选）"),
 ):
     """测试所有启用代理的网络连通稳定性"""
     try:
+        if pid:
+            results = proxy_service.validate_proxy_stability_for_pid(
+                pid=pid,
+                attempts=attempts,
+                test_url=test_url,
+                timeout=timeout,
+            )
+            return {"status": "success", "data": results}
+            
         results = proxy_service.test_all_proxy_stability(
             attempts=attempts,
             test_url=test_url,

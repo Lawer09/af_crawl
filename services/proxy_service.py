@@ -40,6 +40,7 @@ def _test_once(proxy_url: str, ua: Optional[str], test_url: str, timeout: int = 
 
 
 def validate_user_proxies_stability(
+    users:list[dict],
     attempts: int = 5,
     test_url: str = "https://ipinfo.io",
     timeout: int = 8,
@@ -52,14 +53,11 @@ def validate_user_proxies_stability(
 
     返回：每个代理的统计结果列表（pid、proxy_url、attempts、success、success_rate、avg_latency_ms、statuses）。
     """
-    records = UserProxyDAO.get_enable() or []
-    if not records:
-        logger.warning("No enabled proxies found in UserProxyDAO.")
-        return []
+    
 
     results: List[Dict] = []
 
-    for rec in records:
+    for rec in users:
         pid = rec.get("pid") or ""
         proxy_url = rec.get("proxy_url") or ""
         ua = rec.get("ua") or None
@@ -124,9 +122,14 @@ def test_all_proxy_stability(
     """
     验证所有启用代理的网络连通稳定性，打印每个代理的成功率。
     """
-    rets = validate_user_proxies_stability(attempts=attempts, test_url=test_url, timeout=timeout)
-    logger.info("All proxy stability: %s", rets)
+    records = UserProxyDAO.get_enable() or []
+    if not records:
+        logger.warning("No enabled proxies found in UserProxyDAO.")
+        return []
+
+    rets = validate_user_proxies_stability(users=records, attempts=attempts, test_url=test_url, timeout=timeout)
     return [{
+        "pid": r.get("pid"),
         "proxy_url": r.get("proxy_url"),
         "attempts": r.get("attempts"),
         "success_rate": r.get("success_rate"),
@@ -148,7 +151,7 @@ def validate_proxy_stability_for_pid(
         logger.warning("No proxy found for pid=%s", pid)
         return {"pid": pid, "proxy_url": None, "attempts": 0, "success": 0, "success_rate": 0.0, "avg_latency_ms": None, "statuses": []}
 
-    res = validate_user_proxies_stability(attempts=attempts, test_url=test_url, timeout=timeout)
+    res = validate_user_proxies_stability(users=[rec], attempts=attempts, test_url=test_url, timeout=timeout)
     # 过滤出当前 pid 的结果
     for r in res:
         if r.get("pid") == pid:
