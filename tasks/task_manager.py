@@ -12,7 +12,7 @@ from services.task_service import create_pid_now_task
 
 def run():
     """运行任务"""
-    logger.info("=== task_manager start ===")
+    logger.info(f"=== task_manager start : {SYSTEM_TYPE}===")
     last_midnight_date = None
     last_1am_date = None
     # 获取线程池配置

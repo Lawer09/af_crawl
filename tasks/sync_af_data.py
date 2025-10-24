@@ -34,8 +34,14 @@ def pid_handle(task_data_str:str):
             continue
         
         try:
+            logger.info(f"开始获取 CSV 数据 pid={pid} app_id={app_id} date={date}")
             rows = data_service.fetch_csv_by_pid(pid=pid, app_id=app_id, date=date)
+            logger.info(f"获取完成 pid={pid} app_id={app_id} rows={len(rows)}")
+            t0 = time.perf_counter()
+            logger.info(f"开始保存数据 pid={pid} app_id={app_id} rows={len(rows)}")
             data_service.save_data_bulk(pid=pid, date=date, rows=rows)
+            elapsed = time.perf_counter() - t0
+            logger.info(f"保存完成 pid={pid} app_id={app_id} 用时={elapsed:.2f}s rows={len(rows)}")
             time.sleep(random.uniform(1, 3))
             logger.info(f"数据已保存 pid={pid} app_id={app_id} rows={len(rows)}")
             new_app_ids.remove(app_id)

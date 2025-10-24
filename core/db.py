@@ -7,9 +7,12 @@ import mysql.connector
 from mysql.connector.pooling import MySQLConnectionPool, PooledMySQLConnection
 
 from config.settings import MYSQL, REPORT_MYSQL
+import time
+import os
 
 logger = logging.getLogger(__name__)
 
+_SLOW_SEC = float(os.getenv("MYSQL_SLOW_QUERY_SECONDS", "5"))
 class MySQLPool:
 
     def __init__(self, config: dict):
@@ -35,8 +38,18 @@ class MySQLPool:
         conn = self.get_conn()
         try:
             cursor = conn.cursor(dictionary=True)
+            t0 = time.perf_counter()
             cursor.execute(sql, params or ())
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            elapsed = time.perf_counter() - t0
+            if elapsed > _SLOW_SEC:
+                snippet = (sql[:300] + "...") if len(sql) > 300 else sql
+                try:
+                    pcount = len(params) if isinstance(params, (list, tuple, dict)) else (1 if params else 0)
+                except Exception:
+                    pcount = 0
+                logger.warning("[MySQL] slow select: %.2fs params=%d sql=%s", elapsed, pcount, snippet)
+            return rows
         finally:
             cursor.close()
             conn.close()
@@ -50,9 +63,18 @@ class MySQLPool:
         conn = self.get_conn()
         try:
             cursor = conn.cursor()
+            t0 = time.perf_counter()
             cursor.execute(sql, params or ())
             affected_rows = cursor.rowcount
             conn.commit()
+            elapsed = time.perf_counter() - t0
+            if elapsed > _SLOW_SEC:
+                snippet = (sql[:300] + "...") if len(sql) > 300 else sql
+                try:
+                    pcount = len(params) if isinstance(params, (list, tuple, dict)) else (1 if params else 0)
+                except Exception:
+                    pcount = 0
+                logger.warning("[MySQL] slow execute: %.2fs affected=%d params=%d sql=%s", elapsed, affected_rows, pcount, snippet)
             return affected_rows
         except Exception as e:
             conn.rollback()
@@ -68,8 +90,17 @@ class MySQLPool:
         conn = self.get_conn()
         try:
             cursor = conn.cursor()
+            t0 = time.perf_counter()
             cursor.executemany(sql, param_list)
             conn.commit()
+            elapsed = time.perf_counter() - t0
+            snippet = (sql[:300] + "...") if len(sql) > 300 else sql
+            try:
+                pcount = len(param_list)
+            except Exception:
+                pcount = 0
+            if elapsed > _SLOW_SEC:
+                logger.warning("[MySQL] slow executemany: %.2fs batch=%d sql=%s", elapsed, pcount, snippet)
         except Exception as e:
             conn.rollback()
             logger.exception("[MySQL] executemany failed: %s", e)

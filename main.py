@@ -158,6 +158,13 @@ if __name__ == "__main__":
     
     elif args.command == "task":
         from tasks import task_manager
+        import faulthandler
+        Path("logs").mkdir(exist_ok=True)
+        _dump_file = open("logs/thread_dump.log", "a")
+        try:
+            faulthandler.dump_traceback_later(600, repeat=True, file=_dump_file)
+        except Exception:
+            logger.warning("faulthandler 初始化失败，跳过线程栈转储")
         task_manager.run()
 
     elif args.command == "create_tasks":
