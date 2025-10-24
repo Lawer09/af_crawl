@@ -85,40 +85,71 @@ class AfAppDataDAO:
 
     @staticmethod
     def upsert_bulk(items: List[Dict]) -> int:
-        """使用 INSERT ... ON DUPLICATE KEY UPDATE 进行批量 upsert。
-        需要唯一索引：(app_id, pid, offer_id, aff_id, date)
-        更新策略：覆盖 clicks、installs，更新时间戳。
-        返回成功执行的条数（若底层不返回受影响行数则返回尝试条数）。
+        """批量 upsert（不依赖唯一索引）：
+        - 以 (app_id, pid, offer_id, aff_id, date) 为复合键
+        - 单事务执行：先批量 UPDATE，再对不存在键进行条件 INSERT
+        - 不考虑并发锁（无 GET_LOCK）
+        返回：更新+插入的条数估计值
         """
         if not items:
             return 0
         required = {"app_id", "pid", "offer_id", "aff_id", "date"}
-        valid: List[Dict] = []
+        # 去重：同键保留最后一条（覆盖语义）
+        dedup: Dict[tuple, Dict] = {}
         for it in items:
             if not required.issubset(it.keys()):
                 logger.warning("upsert_bulk skip invalid item: missing keys from %s", it)
                 continue
-            valid.append(it)
-        if not valid:
+            key = (it["app_id"], it["pid"], it["offer_id"], it["aff_id"], it["date"])
+            dedup[key] = it
+        if not dedup:
             return 0
-        sql = (
-            f"INSERT INTO {AfAppDataDAO.TABLE} (offer_id, aff_id, clicks, installs, app_id, pid, `date`, updated_at) "
-            f"VALUES (%s, %s, %s, %s, %s, %s, %s, NOW()) "
-            f"ON DUPLICATE KEY UPDATE clicks=VALUES(clicks), installs=VALUES(installs), updated_at=NOW()"
-        )
-        params = [
-            (
-                it["offer_id"], it["aff_id"], int(it.get("af_clicks", 0) or 0), int(it.get("af_installs", 0) or 0),
-                it["app_id"], it["pid"], it["date"],
+        values = list(dedup.values())
+        # 构造衍生表（UNION ALL）
+        row_sql_parts: List[str] = []
+        params: List = []
+        for it in values:
+            row_sql_parts.append(
+                "SELECT %s AS app_id, %s AS pid, %s AS offer_id, %s AS aff_id, %s AS `date`, %s AS clicks, %s AS installs"
             )
-            for it in valid
-        ]
+            params.extend([
+                it["app_id"], it["pid"], it["offer_id"], it["aff_id"], it["date"],
+                int(it.get("af_clicks", 0) or 0), int(it.get("af_installs", 0) or 0),
+            ])
+        derived_sql = " UNION ALL ".join(row_sql_parts)
+
+        update_sql = (
+            f"UPDATE {AfAppDataDAO.TABLE} AS a "
+            f"JOIN ({derived_sql}) AS v "
+            f"ON a.app_id=v.app_id AND a.pid=v.pid AND a.offer_id=v.offer_id AND a.aff_id=v.aff_id AND a.`date`=v.`date` "
+            f"SET a.clicks=v.clicks, a.installs=v.installs, a.updated_at=NOW()"
+        )
+
+        insert_sql = (
+            f"INSERT INTO {AfAppDataDAO.TABLE} (offer_id, aff_id, clicks, installs, app_id, pid, `date`, updated_at) "
+            f"SELECT v.offer_id, v.aff_id, v.clicks, v.installs, v.app_id, v.pid, v.`date`, NOW() "
+            f"FROM ({derived_sql}) AS v "
+            f"LEFT JOIN {AfAppDataDAO.TABLE} AS a "
+            f"ON a.app_id=v.app_id AND a.pid=v.pid AND a.offer_id=v.offer_id AND a.aff_id=v.aff_id AND a.`date`=v.`date` "
+            f"WHERE a.app_id IS NULL"
+        )
+
+        conn = report_mysql_pool.get_conn()
+        cursor = conn.cursor()
         try:
-            affected = report_mysql_pool.executemany(sql, params)
-            return affected if isinstance(affected, int) else len(valid)
+            cursor.execute(update_sql, tuple(params))
+            updated = int(cursor.rowcount or 0)
+            cursor.execute(insert_sql, tuple(params))
+            inserted = int(cursor.rowcount or 0)
+            conn.commit()
+            return updated + inserted
         except Exception as e:
-            logger.exception("AfAppDataDAO.upsert_bulk_odku failed: err=%s", e)
+            conn.rollback()
+            logger.exception("AfAppDataDAO.upsert_bulk failed: err=%s", e)
             return 0
+        finally:
+            cursor.close()
+            conn.close()
 
     @staticmethod
     def upsert_one_safe(item: Dict, lock_timeout: int = 5) -> bool:

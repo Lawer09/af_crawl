@@ -242,36 +242,21 @@ def fetch_by_pid(pid: str, app_id: str, start_date: str | None = None, end_date:
 def save_data_bulk(pid:str, date:str, rows: List[Dict]):
     """批量保存数据"""
     logger.info(f"save_data_bulk start pid={pid} date={date} rows={len(rows)}")
-    t_prepare = time.perf_counter()
     af_rows = []
     for row in rows:
             row['pid'] = pid
             af_row = row.copy()
             af_row['date'] = date
             af_rows.append(af_row)
-    prep_elapsed = time.perf_counter() - t_prepare
-    if prep_elapsed > 2.0:
-        logger.warning(f"save_data_bulk prepare rows slow: {prep_elapsed:.2f}s size={len(rows)}")
     t_user = time.perf_counter()
-    logger.info(f"UserAppDataDAO.save_data_bulk start size={len(rows)}")
     UserAppDataDAO.save_data_bulk(rows)
     user_elapsed = time.perf_counter() - t_user
     logger.info(f"UserAppDataDAO.save_data_bulk done in {user_elapsed:.2f}s size={len(rows)}")
-    if user_elapsed > 5.0:
-        logger.warning(f"UserAppDataDAO.save_data_bulk slow: {user_elapsed:.2f}s size={len(rows)}")
     t_af = time.perf_counter()
-    import os
-    mode = os.getenv("AF_DATA_UPSERT_MODE", "safe").lower()
-    logger.info(f"AfAppDataDAO.upsert_bulk mode={mode} start size={len(af_rows)}")
-    if mode == "odku":
-        AfAppDataDAO.upsert_bulk(af_rows)
-    else:
-        AfAppDataDAO.upsert_bulk_safe(af_rows)
+    AfAppDataDAO.upsert_bulk(af_rows)
     af_elapsed = time.perf_counter() - t_af
-    logger.info(f"AfAppDataDAO.upsert_bulk mode={mode} done in {af_elapsed:.2f}s size={len(af_rows)}")
-    if af_elapsed > 5.0:
-        logger.warning(f"AfAppDataDAO.upsert_bulk mode={mode} slow: {af_elapsed:.2f}s size={len(af_rows)}")
-
+    logger.info(f"AfAppDataDAO.upsert_bulk done in {af_elapsed:.2f}s size={len(af_rows)}")
+  
 
 def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[Dict]:
     """获取最新数据并保存"""
