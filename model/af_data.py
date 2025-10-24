@@ -249,7 +249,6 @@ class AfAppDataDAO:
             f"ON a.offer_id=v.offer_id AND a.aff_id=v.aff_id AND a.`date`=v.`date` "
             f"SET a.clicks=v.clicks, a.installs=v.installs, a.app_id=v.app_id, a.pid=v.pid, a.updated_at=NOW()"
         )
-
         # 对不存在的键进行 INSERT（条件插入），避免删除
         insert_sql = (
             f"INSERT INTO {AfAppDataDAO.TABLE} (offer_id, aff_id, clicks, installs, app_id, pid, `date`, updated_at) "
