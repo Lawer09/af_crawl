@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserCon
 import time
 import threading
 from model.cookie import cookie_model
-from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES, CRAWLER
+from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES, CRAWLER, USE_PROXY
 
 logger = logging.getLogger(__name__)
 
@@ -383,9 +383,14 @@ class SessionManager:
                     """
                 )
                 ua_real = page.evaluate("() => navigator.userAgent")
+
+                if USE_PROXY and ip_val == None:
+                    raise ConnectionError("Browser proxy check failed with proxy: %s", proxy_url)
+
                 logger.info("Browser proxy check -> exit_ip=%s real_ua=%s proxies=%s", ip_val, ua_real, proxies)
             except Exception as _e:
                 logger.debug("browser proxy check failed: %s", _e)
+                raise ConnectionError("Browser proxy check failed")
             
             # 增加页面加载超时和重试
             max_retries = 3
