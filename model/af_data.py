@@ -277,9 +277,11 @@ class AfAppDataDAO:
             if ins_elapsed > _SLOW_SEC:
                 logger.warning("AfAppDataDAO.upsert_bulk_safe INSERT slow: %.2fs inserted=%d", ins_elapsed, int(inserted_count or 0))
 
+            logger.info("AfAppDataDAO.upsert_bulk_safe COMMIT start")
             t_commit = time.perf_counter()
             conn.commit()
             commit_elapsed = time.perf_counter() - t_commit
+            logger.info("AfAppDataDAO.upsert_bulk_safe COMMIT done in %.2fs", commit_elapsed)
             if commit_elapsed > _SLOW_SEC:
                 logger.warning("AfAppDataDAO.upsert_bulk_safe COMMIT slow: %.2fs", commit_elapsed)
             return int(updated_count or 0) + int(inserted_count or 0)

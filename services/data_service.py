@@ -260,12 +260,17 @@ def save_data_bulk(pid:str, date:str, rows: List[Dict]):
     if user_elapsed > 5.0:
         logger.warning(f"UserAppDataDAO.save_data_bulk slow: {user_elapsed:.2f}s size={len(rows)}")
     t_af = time.perf_counter()
-    logger.info(f"AfAppDataDAO.upsert_bulk_safe start size={len(af_rows)}")
-    AfAppDataDAO.upsert_bulk_safe(af_rows)
+    import os
+    mode = os.getenv("AF_DATA_UPSERT_MODE", "safe").lower()
+    logger.info(f"AfAppDataDAO.upsert_bulk mode={mode} start size={len(af_rows)}")
+    if mode == "odku":
+        AfAppDataDAO.upsert_bulk(af_rows)
+    else:
+        AfAppDataDAO.upsert_bulk_safe(af_rows)
     af_elapsed = time.perf_counter() - t_af
-    logger.info(f"AfAppDataDAO.upsert_bulk_safe done in {af_elapsed:.2f}s size={len(af_rows)}")
+    logger.info(f"AfAppDataDAO.upsert_bulk mode={mode} done in {af_elapsed:.2f}s size={len(af_rows)}")
     if af_elapsed > 5.0:
-        logger.warning(f"AfAppDataDAO.upsert_bulk_safe slow: {af_elapsed:.2f}s size={len(af_rows)}")
+        logger.warning(f"AfAppDataDAO.upsert_bulk mode={mode} slow: {af_elapsed:.2f}s size={len(af_rows)}")
 
 
 def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[Dict]:
