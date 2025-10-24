@@ -11,7 +11,7 @@ from model.device import DeviceDAO
 from model.task import TaskDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
-from services import af_config_service, task_service
+from services import af_config_service, proxy_service, task_service
 from services import data_service
 from services.device_manager import DeviceManager
 from services.task_scheduler import TaskScheduler, SchedulerMode
@@ -128,6 +128,26 @@ def get_user_app_data_by_pid(
         raise
     except Exception as e:
         logger.exception(f"Error fetching user app data by pid: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 测试所有代理的稳定性
+@router.get("/proxy/stability")
+def test_all_proxy_stability(
+    attempts: int = Query(10, description="测试次数"),
+    test_url: str = Query("https://ipinfo.io", description="测试URL"),
+    timeout: int = Query(3, description="超时时间（秒）"),
+):
+    """测试所有启用代理的网络连通稳定性"""
+    try:
+        results = proxy_service.test_all_proxy_stability(
+            attempts=attempts,
+            test_url=test_url,
+            timeout=timeout,
+        )
+        return {"status": "success", "data": results}
+    except Exception as e:
+        logger.exception(f"Error testing all proxy stability: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
