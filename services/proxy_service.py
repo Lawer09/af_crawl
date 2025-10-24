@@ -53,7 +53,6 @@ def validate_user_proxies_stability(
 
     返回：每个代理的统计结果列表（pid、proxy_url、attempts、success、success_rate、avg_latency_ms、statuses）。
     """
-    
 
     results: List[Dict] = []
 

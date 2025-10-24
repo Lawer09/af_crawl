@@ -4,7 +4,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 import config.af_config as cfg
-from config.settings import CRAWLER
+from config.settings import AF_DATA_FILTERS, CRAWLER
 from services.fs_service import send_message
 from services.login_service import get_session_by_pid
 from model.user_app_data import UserAppDataDAO
@@ -55,8 +55,8 @@ def parse_af_csv(text: str):
                 return header.index(name)
         return None
 
-    idx_adgroup = find_idx(["adgroup", "adset"])
-    idx_adgroup_id = find_idx(["adgroup-id", "adset-id"])
+    idx_adgroup = find_idx([AF_DATA_FILTERS["groups_dim1"]])
+    idx_adgroup_id = find_idx([AF_DATA_FILTERS["groups_dim2"]])
     idx_clicks = find_idx(["clicks"])
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
@@ -180,6 +180,7 @@ def fetch_csv_by_pid(pid:str, app_id:str, date:str):
 
     payload = cfg.CSV_DATA_PARAM.copy()
     payload["dates"] = {"start": date, "end": date}
+    payload["groupings"] = [{"dimension":AF_DATA_FILTERS["groups_dim1"]},{"dimension":AF_DATA_FILTERS["groups_dim2"]}]
     payload["filters"]["app-id"] = [app_id]
 
     try:

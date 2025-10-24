@@ -349,3 +349,39 @@ class TaskDAO:
         except Exception as e:
             logger.exception(f"Failed to update task priority: task_id={task_id}, priority={priority}, error={e}")
             return False
+
+    @classmethod
+    def get_last_update_time(cls):
+        """获取任务表最近的更新时间（MAX(updated_at)）"""
+        try:
+            row = mysql_pool.fetch_one(f"SELECT MAX(updated_at) AS last_update FROM {cls.TABLE}")
+            return row['last_update'] if row and row.get('last_update') else None
+        except Exception as e:
+            logger.exception(f"Failed to get last update time: {e}")
+            return None
+
+    @classmethod
+    def exists_pending(cls) -> bool:
+        """是否存在可执行的 pending 任务"""
+        try:
+            sql = f"SELECT 1 FROM {cls.TABLE} WHERE status='pending' AND next_run_at<=NOW() AND retry < max_retry_count LIMIT 1"
+            row = mysql_pool.fetch_one(sql)
+            return row is not None
+        except Exception as e:
+            logger.exception(f"Failed to check pending tasks: {e}")
+            return False
+
+    @classmethod
+    def should_create_new_tasks(cls, interval_hours: int = 4) -> bool:
+        """当无 pending 且最近更新时间超过 interval_hours 时返回 True"""
+        try:
+            if cls.exists_pending():
+                return False
+            last_update = cls.get_last_update_time()
+            if not last_update:
+                return True
+            from datetime import datetime, timedelta
+            return last_update + timedelta(hours=interval_hours) < datetime.now()
+        except Exception as e:
+            logger.exception(f"Failed to evaluate should_create_new_tasks: {e}")
+            return False

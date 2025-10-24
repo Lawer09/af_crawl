@@ -8,6 +8,8 @@ from typing import Optional
 
 import requests
 
+from config.settings import FEISHU, SYSTEM_TYPE
+
 FEISHU_BOT_HOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/067033b4-ac8d-4f41-85ec-4852df148932"
 
 logger = logging.getLogger(__name__)
@@ -87,3 +89,11 @@ def send_message(content: str, webhook_url: Optional[str] = None, secret: Option
     if secret:
         return send_feishu_text_with_sign(webhook_url, secret, content)
     return send_feishu_text(webhook_url, content)
+
+
+def send_sys_notify(content:str):
+    if not FEISHU.get("sys_notify_webhook"):
+        logger.error("飞书系统通知 Webhook 未配置")
+        return False
+
+    return send_feishu_text(FEISHU.get("sys_notify_webhook"), f"[{SYSTEM_TYPE}] {content}")

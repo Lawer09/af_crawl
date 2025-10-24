@@ -2,9 +2,11 @@
 
 import logging
 import time
+from config.settings import CRAWLER, SYSTEM_TYPE
 from model.task import TaskDAO
 from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
+from services import fs_service
 from tasks import sync_af_data
 from services.task_service import create_pid_now_task
 
@@ -30,8 +32,10 @@ def run():
                     try:
                         affected = TaskDAO.fail_task_batch(ids, 0)
                         logger.info(f"批量失败 pending 任务: count={len(ids)}, affected={affected}")
+                        fs_service.send_sys_notify(f"批量清空 pending 任务: count={len(ids)}, affected={affected}")
                     except Exception as e:
                         logger.error(f"批量失败 pending 任务失败: {e}")
+                        fs_service.send_sys_notify(f"批量清空 pending 任务失败")
                     pending_batch = TaskDAO.get_pending(limit=1000)
                 logger.info("已将所有 pending 任务标记为 failed")
             except Exception as e:
@@ -42,6 +46,7 @@ def run():
             try:
                 create_pid_now_task()
                 logger.info("create_pid_now_task 执行成功")
+                fs_service.send_sys_notify("添加 AF APP DATA 任务")
             except Exception as e:
                 logger.error(f"执行 create_pid_now_task 失败: {e}")
             last_1am_date = current_date
@@ -50,10 +55,24 @@ def run():
         tasks = TaskDAO.get_pending()
         if not tasks:
             logger.info("没有待处理任务")
-            time.sleep(60*2)
+            try:
+                if TaskDAO.should_create_new_tasks(interval_hours=CRAWLER["interval_hours"]):
+                    try:
+                        create_pid_now_task()
+                        logger.info(f"没有待处理任务且距上次更新时间超过{CRAWLER['interval_hours']}小时，已创建新任务")
+                        fs_service.send_sys_notify("添加 AF APP DATA 任务")
+                    except Exception as e:
+                        logger.error(f"自动创建任务失败: {e}")
+            except Exception as e:
+                logger.error(f"检查任务状态失败: {e}")
+            time.sleep(60*5)
             continue
 
         for task in tasks:
+            now = datetime.now()
+            if now.hour == 0:
+                break
+
             if task["task_type"] == "sync_af_data":
                 try:
                     success, task_data = sync_af_data.pid_handle(task.get("task_data"))

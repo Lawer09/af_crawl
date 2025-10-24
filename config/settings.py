@@ -10,6 +10,8 @@ dotenv_path = BASE_DIR / '.env'
 if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
+SYSTEM_TYPE = os.getenv('SYSTEM_TYPE', 'CHSANGSHA')
+
 # 主数据库连接配置
 MYSQL = {
     'host': os.getenv('MYSQL_HOST', 'localhost'),
@@ -19,6 +21,10 @@ MYSQL = {
     'database': os.getenv('MYSQL_DATABASE', 'af_crawl'),
     'pool_name': 'af_pool',
     'pool_size': int(os.getenv('MYSQL_POOL_SIZE', '5')),
+}
+
+FEISHU = {
+    'sys_notify_webhook': os.getenv('FEISHU_SYS_NOTIFY_WEBHOOK', "https://open.feishu.cn/open-apis/bot/v2/hook/5adf3173-701b-4533-b5f8-2f1dbfaf2068"),
 }
 
 # 报表数据库连接配置
@@ -64,6 +70,7 @@ _proc_default = int(os.getenv('CRAWLER_PROCESSES', '1'))
 _thread_default = int(os.getenv('CRAWLER_THREADS', '1'))
 
 CRAWLER = {
+    'interval_hours': int(os.getenv('CRAWLER_INTERVAL_HOURS', '4')),
     'processes': _proc_default,
     'threads_per_process': _thread_default,
     'max_retry': int(os.getenv('CRAWLER_MAX_RETRY', '5')),  # 增加重试次数
@@ -72,6 +79,11 @@ CRAWLER = {
     'seed_waf_on_202': os.getenv('SEED_WAF_ON_202', 'true').lower() in ('true','1','yes'),
     # 播种节流（同一用户名最小间隔秒数）
     'seed_waf_cooldown_seconds': int(os.getenv('SEED_WAF_COOLDOWN_SECONDS', '180')),
+}
+
+AF_DATA_FILTERS = {
+    'groups_dim1': os.getenv('AF_DATA_GROUPS_DIM1', 'adgroup'),
+    'groups_dim2': os.getenv('AF_DATA_GROUPS_DIM2', 'adgroup-id'),
 }
 
 # 其他常量

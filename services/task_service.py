@@ -7,6 +7,7 @@ import logging
 from model.task import TaskDAO
 from model.user import UserProxyDAO
 from model.user_app import UserAppDAO
+from services import fs_service, proxy_service
 logger = logging.getLogger(__name__)
 
 def create_csv_task_data(pid:str,date:str, app_ids:set, app_retry_count:dict|None = None) -> str:
@@ -74,6 +75,17 @@ def add_pid_app_data_task(pid: str, date: str):
         raise
 
 
+def build_proxy_fail_notify(rets:list[dict]) -> str:
+    """
+    构建代理失效通知消息
+    """
+    msg = "代理延成功率小与50%：\n"
+    for r in rets:
+        if r.get("success_rate") < 0.5:
+            msg += f"{r.get('pid')} - {r.get('proxy_url')} (成功率: {r.get('success_rate')*100:.2f}%)\n"
+    return msg
+
+
 def create_pid_task(date:str) -> None:
     """
     创建应用数据任务, csv 数据
@@ -86,7 +98,19 @@ def create_pid_task(date:str) -> None:
         logger.error("No enable user proxy found for daily data update.")
         return
 
-    pids = list({p.get("pid") for p in user_proxies if p.get("pid")})
+    # 检测一下pid的静态代理并通知失效（成功率小与50%）的静态代理
+    rets = proxy_service.validate_user_proxies_stability(
+        users=user_proxies,
+        attempts=5,
+        test_url="https://ipinfo.io",
+        timeout=8,
+    )
+
+    msg = build_proxy_fail_notify(rets)
+    if msg:
+        fs_service.send_message(msg, webhook_url="https://open.feishu.cn/open-apis/bot/v2/hook/5adf3173-701b-4533-b5f8-2f1dbfaf2068")
+
+    pids = list({r.get("pid") for r in rets if r.get("success_rate") >= 0.5})
     logger.info(f"create pid task for {len(pids)} pids.")
 
     for pid in pids:
