@@ -43,7 +43,6 @@ def pid_handle(task_data_str:str):
             elapsed = time.perf_counter() - t0
             logger.info(f"保存完成 pid={pid} app_id={app_id} 用时={elapsed:.2f}s rows={len(rows)}")
             time.sleep(random.uniform(1, 3))
-            logger.info(f"数据已保存 pid={pid} app_id={app_id} rows={len(rows)}")
             new_app_ids.remove(app_id)
         except Exception as e:
             logger.error(f"task fail processing {app_id}: {str(e)}")
