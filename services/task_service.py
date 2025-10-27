@@ -138,3 +138,12 @@ def create_pid_now_task():
     yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
     logger.info(f"create task for date={yesterday_str}")
     create_pid_task(yesterday_str)
+
+def get_tasks_pid(tasks: list[dict], system_type: int) -> list[str]:
+    """获取任务列表数据中的 pid"""
+    pids = []
+    for task in tasks:
+        data = parse_task_data(task.get("task_data", ""))
+        if data.get("system_type") == system_type:
+            pids.append(data.get("pid", ""))
+    return pids
