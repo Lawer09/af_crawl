@@ -218,10 +218,17 @@ def get_user_app_data_gap_by_pid(
 @router.get("/user/app")
 def get_user_app_by_pid(
     pid: str = Query(..., description="用户PID"),
+    pids: Optional[str] = Query(None, description="用户PID列表，逗号分隔（可选）"),
 ):
     """通过 pid 获取用户 app 列表"""
     try:
-        apps = fetch_and_save_apps_by_pid(pid)
+        pid_list = [pid]
+        if pids:
+            pid_list.extend(pids.split(','))
+       
+        apps = {}
+        for p in list(set(pid_list)):
+            apps[p] = fetch_and_save_apps_by_pid(p)
         return {"status": "success", "data": apps}
     except Exception as e:
         logger.exception(f"Error fetching user app data by pid: {e}")

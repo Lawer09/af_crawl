@@ -54,6 +54,18 @@ def _sanitize_proxy_url(raw: str) -> tuple[str, bool, str]:
         return s, False, f"parse error: {type(e).__name__}"
 
 
+def _sanitize_user_agent(ua: Optional[str]) -> Optional[str]:
+    """清洗 UA：移除不可打印字符并折叠空格，避免 requests 拒绝非法头。"""
+    if not ua:
+        return ua
+    try:
+        cleaned = ''.join(ch for ch in str(ua) if 32 <= ord(ch) <= 126)
+        cleaned = ' '.join(cleaned.split())
+        return cleaned.strip() or None
+    except Exception:
+        return (str(ua).strip() or None)
+
+
 def _test_once(proxy_url: str, ua: Optional[str], test_url: str, timeout: int = 8) -> tuple[bool, float, int, Optional[str], Optional[str]]:
     """使用指定代理请求 test_url 一次，返回 (是否成功, 延迟ms, 状态码, 错误类型, 错误信息)。
 
@@ -63,8 +75,11 @@ def _test_once(proxy_url: str, ua: Optional[str], test_url: str, timeout: int = 
     status = 0
     try:
         headers = {}
-        if ua:
-            headers["User-Agent"] = ua
+        ua_clean = _sanitize_user_agent(ua)
+        if ua_clean:
+            headers["User-Agent"] = ua_clean
+        elif ua:
+            logger.debug("UA sanitized to empty; skip header. raw=%r", ua)
         sess = requests.Session()
         sess.trust_env = False  # 禁用环境代理干扰
         resp = sess.get(
@@ -84,7 +99,6 @@ def _test_once(proxy_url: str, ua: Optional[str], test_url: str, timeout: int = 
         err_msg = str(e)
         logger.debug("_test_once exception: %s - %s", err_type, err_msg)
         return False, elapsed_ms, status, err_type, err_msg
-
 
 
 def validate_user_proxies_stability(
