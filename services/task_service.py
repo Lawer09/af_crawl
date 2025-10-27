@@ -1,6 +1,3 @@
-from typing import Any
-
-
 from model.offer import OfferDAO
 import logging
 
@@ -10,13 +7,16 @@ from model.user_app import UserAppDAO
 from services import fs_service, proxy_service
 logger = logging.getLogger(__name__)
 
-def create_csv_task_data(pid:str,date:str, app_ids:set, app_retry_count:dict|None = None) -> str:
+def create_csv_task_data(system_type: int | None, pid: str, date: str, app_ids: set, app_retry_count: dict | None = None) -> str:
     import json
     data = {
         "pid": pid,
         "date": date,
         "app_ids": list(app_ids),
     }
+    # 将系统类型写入任务数据（可选，兼容旧调用）
+    if system_type is not None:
+        data["system_type"] = system_type
     if app_retry_count:
         data["app_retry_count"] = app_retry_count
     return json.dumps(data)
@@ -35,8 +35,8 @@ class OldAppDataErr(Exception):
     """旧版app数据"""
     pass
 
-def add_pid_app_data_task(pid: str, date: str):
-    """添加pid任务, date 爬取日期"""
+def add_pid_app_data_task(pid: str, date: str, system_type: int | None = None):
+    """添加pid任务, date 爬取日期（可携带 system_type）"""
     try:
         from datetime import datetime
 
@@ -67,7 +67,7 @@ def add_pid_app_data_task(pid: str, date: str):
             logger.info(f"{pid} : apps is not in af user apps")
             raise OldAppDataErr(f"pid={pid} app没有在af app列表中的数据")
 
-        task_data = create_csv_task_data(pid, date, sys_app_id_set)
+        task_data = create_csv_task_data(system_type=system_type, pid=pid, date=date, app_ids=sys_app_id_set)
         TaskDAO.add_task(task_type='sync_af_data',
             task_data=task_data,
             next_run_at=now_date_time,
@@ -115,6 +115,8 @@ def create_pid_task(date:str) -> None:
         fs_service.send_message(msg, webhook_url="https://open.feishu.cn/open-apis/bot/v2/hook/5adf3173-701b-4533-b5f8-2f1dbfaf2068")
 
     pids = list({r.get("pid") for r in rets if r.get("success_rate") >= 0.5})
+    # 从 user_proxies 建立 pid -> system_type 映射
+    pid_system_type_map = {u.get("pid"): u.get("system_type") for u in user_proxies if u.get("pid")}
     logger.info(f"create pid task for {len(pids)} pids.")
 
     update_app_data_pids = set()
@@ -122,7 +124,8 @@ def create_pid_task(date:str) -> None:
         try:
             add_pid_app_data_task(
                 pid=pid,
-                date=date
+                date=date,
+                system_type=pid_system_type_map.get(pid)
             )
         except OldAppDataErr as e:
             # 需要更新App数据
