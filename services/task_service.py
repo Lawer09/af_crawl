@@ -31,6 +31,9 @@ def parse_task_data(task_data: str) -> dict:
         logger.warning("Invalid task_data format: %s", e)
     return {}
 
+class OldAppDataErr(Exception):
+    """旧版app数据"""
+    pass
 
 def add_pid_app_data_task(pid: str, date: str):
     """添加pid任务, date 爬取日期"""
@@ -42,13 +45,14 @@ def add_pid_app_data_task(pid: str, date: str):
         
         if not offers:
             logger.info(f"create task for pid={pid} with no offers.")
+            return
             
         # 获取当前pid下的app
         apps = UserAppDAO.get_list_by_pid(pid)
 
         if not apps:
             logger.info(f"{pid} : apps is empty")
-            return
+            raise OldAppDataErr(f"pid={pid} 没有app数据")
 
         app_id_set = set([str(app.get("app_id")) for app in apps])
         
@@ -61,7 +65,7 @@ def add_pid_app_data_task(pid: str, date: str):
 
         if not sys_app_id_set:
             logger.info(f"{pid} : apps is not in af user apps")
-            return
+            raise OldAppDataErr(f"pid={pid} app没有在af app列表中的数据")
 
         task_data = create_csv_task_data(pid, date, sys_app_id_set)
         TaskDAO.add_task(task_type='sync_af_data',
@@ -113,15 +117,19 @@ def create_pid_task(date:str) -> None:
     pids = list({r.get("pid") for r in rets if r.get("success_rate") >= 0.5})
     logger.info(f"create pid task for {len(pids)} pids.")
 
+    update_app_data_pids = set()
     for pid in pids:
         try:
             add_pid_app_data_task(
                 pid=pid,
                 date=date
             )
+        except OldAppDataErr as e:
+            # 需要更新App数据
+            update_app_data_pids.add(pid)
         except Exception as e:
             logger.error(f"add_pid_app_data_task fail: {str(e)}")
-
+    fs_service.send_sys_notify(f"需要更新App数据的pid如下\n{','.join(update_app_data_pids)}")
 
 def create_pid_now_task():
     """创建应用数据任务, csv 数据, 昨天日期"""
