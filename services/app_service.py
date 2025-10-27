@@ -97,6 +97,7 @@ def fetch_apps(
 def save_apps(apps: List[Dict]):
     """批量保存app列表到数据库"""
     UserAppDAO.save_apps(apps)
+    logger.info(f"Successfully saved {len(apps)} apps for user {apps[0]['username']}")
 
 def fetch_and_save_apps_by_pid(pid: str) -> List[Dict]:
     """获取某个pid下的app列表并写入数据库，返回列表（带代理与UA）"""
