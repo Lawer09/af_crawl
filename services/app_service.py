@@ -101,33 +101,37 @@ def save_apps(apps: List[Dict]):
 
 def fetch_and_save_apps_by_pid(pid: str) -> List[Dict]:
     """获取某个pid下的app列表并写入数据库，返回列表（带代理与UA）"""
-    user = UserDAO.get_user_by_pid(pid)
-    if not user:
-        logger.error(f"User with pid={pid} not found.")
+    try:
+        user = UserDAO.get_user_by_pid(pid)
+        if not user:
+            logger.error(f"User with pid={pid} not found.")
+            return []
+        # 先查数据库中最近1天的数据，若存在直接返回
+        recent_apps = UserAppDAO.get_recent_user_apps(user["email"], within_days=1)
+        if recent_apps:
+            return recent_apps
+
+        # 无缓存则实时查询并更新（带静态代理配置）
+        proxy_rec = UserProxyDAO.get_by_pid(pid)
+        proxies = None
+        browser_args = {}
+        if proxy_rec:
+            if proxy_rec.get("proxy_url"):
+                proxies = {"http": proxy_rec["proxy_url"], "https": proxy_rec["proxy_url"]}
+            if proxy_rec.get("ua"):
+                browser_args["user_agent"] = proxy_rec["ua"]
+            if proxy_rec.get("timezone_id"):
+                browser_args["timezone_id"] = proxy_rec["timezone_id"]
+
+        apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
+        for app in apps:
+            app["user_type_id"] = pid
+
+        save_apps(apps)
+        return apps
+    except Exception as e:
+        logger.error("Failed to fetch apps for pid=%s: %s", pid, e)
         return []
-    # 先查数据库中最近1天的数据，若存在直接返回
-    recent_apps = UserAppDAO.get_recent_user_apps(user["email"], within_days=1)
-    if recent_apps:
-        return recent_apps
-
-    # 无缓存则实时查询并更新（带静态代理配置）
-    proxy_rec = UserProxyDAO.get_by_pid(pid)
-    proxies = None
-    browser_args = {}
-    if proxy_rec:
-        if proxy_rec.get("proxy_url"):
-            proxies = {"http": proxy_rec["proxy_url"], "https": proxy_rec["proxy_url"]}
-        if proxy_rec.get("ua"):
-            browser_args["user_agent"] = proxy_rec["ua"]
-        if proxy_rec.get("timezone_id"):
-            browser_args["timezone_id"] = proxy_rec["timezone_id"]
-
-    apps = fetch_apps(user, proxies=proxies, browser_context_args=browser_args)
-    for app in apps:
-        app["user_type_id"] = pid
-
-    save_apps(apps)
-    return apps
 
 
 def fetch_pid_apps(pid: str) -> List[Dict]:
