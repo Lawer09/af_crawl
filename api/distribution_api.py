@@ -217,7 +217,7 @@ def get_user_app_data_gap_by_pid(
 
 @router.get("/user/app")
 def get_user_app_by_pid(
-    pid: str = Query(..., description="用户PID"),
+    pid: Optional[str] = Query(..., description="用户PID"),
     pids: Optional[str] = Query(None, description="用户PID列表，逗号分隔（可选）"),
 ):
     """通过 pid 获取用户 app 列表"""
