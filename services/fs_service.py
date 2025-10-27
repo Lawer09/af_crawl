@@ -97,3 +97,11 @@ def send_sys_notify(content:str):
         return False
 
     return send_feishu_text(FEISHU.get("sys_notify_webhook"), f"[{SYSTEM_TYPE}] {content}")
+
+
+def send_zhengzhou_notify(content:str):
+    if not FEISHU.get("zhengzhou_notify_webhook"):
+        logger.error("飞书正洲通知 Webhook 未配置")
+        return False
+
+    return send_feishu_text(FEISHU.get("zhengzhou_notify_webhook"), f"[{SYSTEM_TYPE}] {content}")

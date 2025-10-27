@@ -168,6 +168,22 @@ class UserProxyDAO:
             return None
     
     @classmethod
+    def get_list_in_system_types(cls, system_types: List[str]) -> Optional[List[Dict]]:
+        """根据 system_type 查询所有代理记录"""
+        try:
+            sql = (
+                f"SELECT id, pid, proxy_url, country, sub_at, end_at, created_at, "
+                f"system_type, ua, timezone_id FROM {cls.TABLE} WHERE system_type IN ({','.join(['%s']*len(system_types))})"
+            )
+            rows = mysql_pool.select(sql, tuple(system_types))
+            if rows:
+                return rows
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user proxy by system_type: {e}")
+            return None
+
+    @classmethod
     def get_random_one(cls) -> Optional[Dict]:
         """随机获取一条未停用的代理记录"""
         try:

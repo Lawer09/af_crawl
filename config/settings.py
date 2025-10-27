@@ -25,6 +25,7 @@ MYSQL = {
 
 FEISHU = {
     'sys_notify_webhook': os.getenv('FEISHU_SYS_NOTIFY_WEBHOOK', "https://open.feishu.cn/open-apis/bot/v2/hook/5adf3173-701b-4533-b5f8-2f1dbfaf2068"),
+    'zhengzhou_notify_webhook': os.getenv('FEISHU_ZHENGZHOU_NOTIFY_WEBHOOK', "https://open.feishu.cn/open-apis/bot/v2/hook/9ccd5e08-4cd3-4c31-bc31-94b839fe0100"),
 }
 
 # 报表数据库连接配置

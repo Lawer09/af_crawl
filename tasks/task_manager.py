@@ -6,6 +6,7 @@ from config.settings import CRAWLER, SYSTEM_TYPE
 from model.task import TaskDAO
 from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
+from model.user import UserProxyDAO
 from services import fs_service
 from tasks import sync_af_data
 from services.task_service import create_pid_now_task
@@ -58,6 +59,14 @@ def run():
             try:
                 if TaskDAO.should_create_new_tasks(interval_hours=CRAWLER["interval_hours"]):
                     try:
+                        # 增加郑州系统的af更新数据通知
+                        user_proxies = UserProxyDAO.get_list_in_system_types([1,2,3])
+                        if user_proxies:
+                            msg = f""
+                            for proxy in user_proxies:
+                                msg += f"{proxy['system_type']} {proxy['pid']}\n"
+                            fs_service.send_zhengzhou_notify(f"AF更新完毕\n{msg}")
+
                         create_pid_now_task()
                         logger.info(f"没有待处理任务且距上次更新时间超过{CRAWLER['interval_hours']}小时，已创建新任务")
                         fs_service.send_sys_notify("添加 AF APP DATA 任务")
