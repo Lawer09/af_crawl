@@ -222,10 +222,11 @@ def get_user_app_by_pid(
 ):
     """通过 pid 获取用户 app 列表"""
     try:
-        pid_list = [pid]
+        pid_list = []
         if pids:
             pid_list.extend(pids.split(','))
-       
+        if pid:
+            pid_list.append(pid)
         apps = {}
         for p in list(set(pid_list)):
             apps[p] = fetch_and_save_apps_by_pid(p)
