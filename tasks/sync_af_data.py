@@ -47,6 +47,6 @@ def pid_handle(task_data_str:str):
         except Exception as e:
             logger.error(f"task fail processing {app_id}: {str(e)}")
             app_retry_count[app_id] = retry_count + 1
-            return False, task_service.create_csv_task_data(pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count)
+            return False, task_service.create_csv_task_data(system_type=task_data.get('system_type'), pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count)
 
-    return not new_app_ids, task_service.create_csv_task_data(pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count)
+    return not new_app_ids, task_service.create_csv_task_data(system_type=task_data.get('system_type'), pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count)
