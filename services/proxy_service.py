@@ -6,6 +6,7 @@ from typing import List, Dict, Optional
 
 import requests
 from urllib.parse import urlparse, urlunparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from model.user import UserProxyDAO
 import config.af_config as cfg
@@ -193,24 +194,111 @@ def test_all_proxy_stability(
     attempts: int = 5,
     test_url: str = "https://ipinfo.io",
     timeout: int = 8,
+    workers: int = 8,
 ) -> List[Dict]:
     """
-    验证所有启用代理的网络连通稳定性，打印每个代理的成功率。
+    并发验证所有启用代理的网络连通稳定性，提升整体测试速度。
+
+    返回结构与之前保持一致：仅包含 pid、proxy_url、attempts、success_rate、avg_latency_ms。
     """
     records = UserProxyDAO.get_enable() or []
     if not records:
         logger.warning("No enabled proxies found in UserProxyDAO.")
         return []
 
-    rets = validate_user_proxies_stability(users=records, attempts=attempts, test_url=test_url, timeout=timeout)
-    return [{
-        "pid": r.get("pid"),
-        "proxy_url": r.get("proxy_url"),
-        "attempts": r.get("attempts"),
-        "success_rate": r.get("success_rate"),
-        "avg_latency_ms": r.get("avg_latency_ms")
-    } for r in rets if r.get("proxy_url")]
+    max_workers = max(1, min(workers, len(records)))
+    summary: List[Dict] = []
 
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_map = {
+            pool.submit(
+                validate_user_proxies_stability,
+                users=[rec],
+                attempts=attempts,
+                test_url=test_url,
+                timeout=timeout,
+            ): rec for rec in records
+        }
+
+        for fut in as_completed(future_map):
+            try:
+                ret_list = fut.result() or []
+                if not ret_list:
+                    continue
+                r = ret_list[0]
+                if r.get("proxy_url"):
+                    summary.append({
+                        "pid": r.get("pid"),
+                        "proxy_url": r.get("proxy_url"),
+                        "attempts": r.get("attempts"),
+                        "success_rate": r.get("success_rate"),
+                        "avg_latency_ms": r.get("avg_latency_ms"),
+                    })
+            except Exception as e:
+                rec = future_map[fut]
+                logger.exception("Parallel proxy stability test failed for pid=%s: %s", rec.get("pid"), e)
+
+    return summary
+
+
+def test_proxy_stability_for_pids(
+    pids: List[str],
+    attempts: int = 5,
+    test_url: str = "https://ipinfo.io",
+    timeout: int = 8,
+    workers: int = 8,
+) -> List[Dict]:
+    """
+    并发验证指定 pid 列表的代理稳定性，仅测试启用的静态代理。
+
+    返回结构与 `test_all_proxy_stability` 保持一致：
+    仅包含 pid、proxy_url、attempts、success_rate、avg_latency_ms。
+    """
+    if not pids:
+        return []
+
+    # 仅测试启用的静态代理，避免无效/停用记录
+    all_enabled = UserProxyDAO.get_enable() or []
+    pid_set = {p for p in pids if p}
+    records = [rec for rec in all_enabled if (rec.get("pid") in pid_set)]
+
+    if not records:
+        logger.warning("No enabled proxies matched for given pids: %s", list(pid_set))
+        return []
+
+    max_workers = max(1, min(workers, len(records)))
+    summary: List[Dict] = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_map = {
+            pool.submit(
+                validate_user_proxies_stability,
+                users=[rec],
+                attempts=attempts,
+                test_url=test_url,
+                timeout=timeout,
+            ): rec for rec in records
+        }
+
+        for fut in as_completed(future_map):
+            try:
+                ret_list = fut.result() or []
+                if not ret_list:
+                    continue
+                r = ret_list[0]
+                if r.get("proxy_url"):
+                    summary.append({
+                        "pid": r.get("pid"),
+                        "proxy_url": r.get("proxy_url"),
+                        "attempts": r.get("attempts"),
+                        "success_rate": r.get("success_rate"),
+                        "avg_latency_ms": r.get("avg_latency_ms"),
+                    })
+            except Exception as e:
+                rec = future_map[fut]
+                logger.exception("Parallel proxy stability test failed for pid=%s: %s", rec.get("pid"), e)
+
+    return summary
 
 
 def validate_proxy_stability_for_pid(

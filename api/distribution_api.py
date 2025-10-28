@@ -89,6 +89,7 @@ def set_pid_auth_prt(
         logger.error(f"Error adding prt auth for pid {pid}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/task/app/data")
 def add_pid_app_data_task( 
     pid: str = Query(..., description="用户PID"),
@@ -131,16 +132,35 @@ def get_user_app_data_by_pid(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 测试所有代理的稳定性
+# 测试所有代理的稳定性（并发）
 @router.get("/proxy/stability")
 def test_all_proxy_stability(
     attempts: int = Query(10, description="测试次数"),
     test_url: str = Query("https://ipinfo.io", description="测试URL"),
     timeout: int = Query(3, description="超时时间（秒）"),
     pid: Optional[str] = Query(None, description="用户PID（可选）"),
+    pids: Optional[List[str]] = Query(None, description="用户PID列表（可选，多值）"),
+    workers: int = Query(8, description="并发线程数"),
 ):
-    """测试所有启用代理的网络连通稳定性"""
+    """测试启用代理的网络连通稳定性，支持并发加速。
+
+    - 指定 `pid` 时仅测试该用户代理（保持原逻辑）
+    - 指定 `pids` 时并发测试指定 pid 列表（启用代理）
+    - 未指定 `pid`/`pids` 时调用服务层并发方法测试所有启用代理
+    """
     try:
+        # 多个 pid 并发测试
+        if pids:
+            summary = proxy_service.test_proxy_stability_for_pids(
+                pids=pids,
+                attempts=attempts,
+                test_url=test_url,
+                timeout=timeout,
+                workers=workers,
+            )
+            return {"status": "success", "data": summary}
+
+        # 单个 pid 的测试沿用原逻辑
         if pid:
             results = proxy_service.validate_proxy_stability_for_pid(
                 pid=pid,
@@ -149,13 +169,15 @@ def test_all_proxy_stability(
                 timeout=timeout,
             )
             return {"status": "success", "data": results}
-            
-        results = proxy_service.test_all_proxy_stability(
+
+        # 并发测试所有启用代理：调用服务层统一实现
+        summary = proxy_service.test_all_proxy_stability(
             attempts=attempts,
             test_url=test_url,
             timeout=timeout,
+            workers=workers,
         )
-        return {"status": "success", "data": results}
+        return {"status": "success", "data": summary}
     except Exception as e:
         logger.exception(f"Error testing all proxy stability: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
