@@ -6,6 +6,7 @@ from typing import List, Dict
 from services.login_service import get_session, get_session_by_pid
 from model.user_app import UserAppDAO
 from model.user import UserDAO, UserProxyDAO
+from services.fs_service import send_sys_notify
 
 import config.af_config as cfg
 from utils.retry import request_with_retry
@@ -230,6 +231,13 @@ def update_user_apps():
             all_apps.extend(apps)
             # 输出当前用户（带pid）获取的app数量
             logger.info("Fetched apps count: pid=%s username=%s count=%d", pid, user.get("email"), len(apps))
+            # 发送系统通知：包含 system_type（由 send_sys_notify 自动添加）、pid、更新数量
+            try:
+                ok = send_sys_notify(f"更新用户App列表：pid={pid}, 更新数量={len(apps)}")
+                if not ok:
+                    logger.warning("系统通知发送失败: pid=%s", pid)
+            except Exception:
+                logger.exception("系统通知异常: pid=%s", pid)
             UserAppDAO.save_apps(all_apps)
         except Exception as e:
             # 单用户异常不影响整批次，记录并跳过
