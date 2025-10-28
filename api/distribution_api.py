@@ -248,18 +248,31 @@ def get_user_app_data_gap_by_pid(
 
 @router.get("/user/app")
 def get_user_app_by_pid(
-    pid: Optional[str] = Query(..., description="用户PID"),
-    pids: Optional[str] = Query(None, description="用户PID列表，逗号分隔（可选）"),
+    pid: Optional[str] = Query(None, description="用户PID（可选）"),
+    pids: Optional[List[str]] = Query(None, description="用户PID列表（可选，支持逗号分隔或重复参数）"),
 ):
-    """通过 pid 获取用户 app 列表"""
+    """通过 pid 获取用户 app 列表。
+
+    - 可传 `pid`（单个）或 `pids`（多个）。
+    - `pids` 支持两种格式：`pids=a&pids=b` 或 `pids=a,b`。
+    - 若两者均未提供，返回 400 错误提示。
+    """
     try:
-        pid_list = []
+        pid_list: List[str] = []
+        # 展开 pids（兼容逗号分隔与重复参数）
         if pids:
-            pid_list.extend(pids.split(','))
+            for item in pids:
+                if item:
+                    pid_list.extend([x.strip() for x in item.split(',') if x.strip()])
         if pid:
-            pid_list.append(pid)
-        apps = {}
-        for p in list(set(pid_list)):
+            pid_list.append(pid.strip())
+
+        # 无 pid 输入直接提示
+        if not pid_list:
+            raise HTTPException(status_code=400, detail="pid 或 pids 必须提供其一")
+
+        apps: Dict[str, List[Dict]] = {}
+        for p in list(dict.fromkeys(pid_list)):
             apps[p] = fetch_and_save_apps_by_pid(p)
         return {"status": "success", "data": apps}
     except Exception as e:
