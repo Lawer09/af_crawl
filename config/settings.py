@@ -71,7 +71,7 @@ _proc_default = int(os.getenv('CRAWLER_PROCESSES', '1'))
 _thread_default = int(os.getenv('CRAWLER_THREADS', '1'))
 
 CRAWLER = {
-    'interval_hours': int(os.getenv('CRAWLER_INTERVAL_HOURS', '4')),
+    'interval_hours': int(os.getenv('CRAWLER_INTERVAL_HOURS', '3')),
     'processes': _proc_default,
     'threads_per_process': _thread_default,
     'max_retry': int(os.getenv('CRAWLER_MAX_RETRY', '5')),  # 增加重试次数
