@@ -145,14 +145,23 @@ def test_all_proxy_stability(
     """测试启用代理的网络连通稳定性，支持并发加速。
 
     - 指定 `pid` 时仅测试该用户代理（保持原逻辑）
-    - 指定 `pids` 时并发测试指定 pid 列表（启用代理）
+    - 指定 `pids` 时并发测试指定 pid 列表（启用代理，支持逗号分隔或重复参数）
     - 未指定 `pid`/`pids` 时调用服务层并发方法测试所有启用代理
     """
     try:
-        # 多个 pid 并发测试
         if pids:
+            expanded: List[str] = []
+            for item in pids:
+                if item:
+                    expanded.extend([x.strip() for x in item.split(',') if x.strip()])
+            # 同时包含单个 pid（若传入）
+            if pid:
+                expanded.append(pid.strip())
+            # 去重并保持顺序
+            expanded = list(dict.fromkeys(expanded))
+
             summary = proxy_service.test_proxy_stability_for_pids(
-                pids=pids,
+                pids=expanded,
                 attempts=attempts,
                 test_url=test_url,
                 timeout=timeout,
