@@ -36,6 +36,45 @@ def run_update_apps_cron(interval_minutes: int = 60):
         logger.info("sync_apps_cron stopped by user")
 
 
+def _seconds_until_next_midnight() -> int:
+    """计算距离下一次0点的秒数。"""
+    import datetime as _dt
+    now = _dt.datetime.now()
+    tomorrow = now.date() + _dt.timedelta(days=1)
+    next_midnight = _dt.datetime.combine(tomorrow, _dt.time())
+    return int((next_midnight - now).total_seconds())
+
+
+def start_update_apps_midnight_scheduler():
+    """启动后台定时任务，每天0点执行一次 update_user_apps。"""
+    def _runner():
+        while True:
+            try:
+                sleep_secs = _seconds_until_next_midnight()
+                logger.info("update_apps_midnight_scheduler sleeping %d seconds until next midnight", sleep_secs)
+                time.sleep(max(1, sleep_secs))
+                update_user_apps()
+            except Exception:
+                logger.exception("update_user_apps midnight scheduled run failed")
+                # 失败后稍等一分钟，避免快速重试
+                time.sleep(60)
+
+    t = threading.Thread(target=_runner, name="update_apps_midnight_scheduler", daemon=True)
+    t.start()
+    return t
+
+
+def run_update_apps_midnight_cron():
+    """以前台阻塞形式运行每天0点执行的应用列表更新任务。"""
+    logger.info("=== sync_apps_midnight_cron start (daily at 00:00) ===")
+    start_update_apps_midnight_scheduler()
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        logger.info("sync_apps_midnight_cron stopped by user")
+
+
 def start_update_data_scheduler(interval_hours: int = 24):
     """启动后台定时任务。"""
     def _runner():
@@ -48,7 +87,6 @@ def start_update_data_scheduler(interval_hours: int = 24):
     t = threading.Thread(target=_runner, name="update_data_scheduler", daemon=True)
     t.start()
     return t
-
 
 def run_update_data_cron(interval_hours: int = 24):
     """以前台阻塞形式运行数据定时任务。"""

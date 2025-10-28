@@ -94,6 +94,20 @@ class UserAppDAO:
         return {r['username'] for r in rows}
 
     @classmethod
+    def get_recent_usernames_by_hours(cls, usernames: List[str], within_hours: int = 4) -> set:
+        """查询最近 within_hours 小时有更新记录的用户名集合，减少逐用户检查次数。"""
+        if not usernames:
+            return set()
+        cls.init_table()
+        placeholders = ','.join(['%s'] * len(usernames))
+        sql = (
+            f"SELECT DISTINCT username FROM {cls.TABLE} "
+            f"WHERE username IN ({placeholders}) AND updated_at >= NOW() - INTERVAL %s HOUR"
+        )
+        rows = mysql_pool.select(sql, tuple(usernames) + (within_hours,))
+        return {r['username'] for r in rows}
+
+    @classmethod
     def get_all_active(cls) -> List[Dict]:
         cls.init_table()
         sql = f"SELECT * FROM {cls.TABLE} WHERE app_status=0"

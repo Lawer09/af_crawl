@@ -197,12 +197,12 @@ def update_user_apps():
     # 建立 pid 到代理记录的映射
     proxy_map = {p.get("pid"): p for p in user_proxies if p.get("pid")}
 
-    # 2) 准备一次性查询最近一天已更新过的用户名集合，减少逐用户检查
+    # 2) 准备一次性查询最近4小时已更新过的用户名集合，减少逐用户检查
     users = [u for u in pid_user_map.values() if u]
     usernames = [u["email"] for u in users]
-    recent_usernames = UserAppDAO.get_recent_usernames(usernames, within_days=1)
+    recent_usernames = UserAppDAO.get_recent_usernames_by_hours(usernames, within_hours=4)
 
-    # 3) 仅为未在最近一天更新过的用户抓取 app 列表
+    # 3) 仅为未在最近4小时更新过的用户抓取 app 列表
     all_apps: List[Dict] = []
     # 迭代 (pid, user) 保证 user_type_id 正确设置，并根据 pid 查代理
     for pid, user in pid_user_map.items():
