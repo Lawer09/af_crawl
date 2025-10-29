@@ -48,7 +48,7 @@ CSV_DATA_PARAM = {
     "dates":{"start":"2025-10-22","end":"2025-10-22"},
     "filters":{"app-id":["com.elaworld.mexloan"]},
     "view-type":"unified",
-    "localization":{"timezone":"America/Mexico_City","currency":"USD"},
+    "localization":{"timezone":"UTC","currency":"USD"},
     "groupings":[{"dimension":"adgroup"},{"dimension":"adgroup-id"}],
     "summations":["totals","others"],
     "metrics":[
