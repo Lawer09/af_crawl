@@ -205,6 +205,7 @@ def update_user_apps():
 
     # 3) 仅为未在最近4小时更新过的用户抓取 app 列表
     all_apps: List[Dict] = []
+    notify_lines: List[str] = []
     # 迭代 (pid, user) 保证 user_type_id 正确设置，并根据 pid 查代理
     for pid, user in pid_user_map.items():
         if not user:
@@ -229,18 +230,21 @@ def update_user_apps():
             for app in apps:
                 app["user_type_id"] = pid
             all_apps.extend(apps)
-            # 输出当前用户（带pid）获取的app数量
+            # 输出当前用户（带pid）获取的app数量，并记录汇总条目
             logger.info("Fetched apps count: pid=%s username=%s count=%d", pid, user.get("email"), len(apps))
-            # 发送系统通知：包含 system_type（由 send_sys_notify 自动添加）、pid、更新数量
-            try:
-                ok = send_sys_notify(f"更新用户App列表：pid={pid}, 更新数量={len(apps)}")
-                if not ok:
-                    logger.warning("系统通知发送失败: pid=%s", pid)
-            except Exception:
-                logger.exception("系统通知异常: pid=%s", pid)
+            notify_lines.append(f"pid={pid}, username={user.get('email')}, 更新数量={len(apps)}")
             UserAppDAO.save_apps(all_apps)
         except Exception as e:
             # 单用户异常不影响整批次，记录并跳过
             logger.exception("update_daily_apps user failed: pid=%s username=%s -> %s", pid, user.get("email"), e)
             continue
+    # 汇总一次发送系统通知
+    if notify_lines:
+        summary = "更新用户App列表汇总：\n" + "\n".join(notify_lines)
+        try:
+            ok = send_sys_notify(summary)
+            if not ok:
+                logger.warning("系统通知发送失败: 汇总")
+        except Exception:
+            logger.exception("系统通知异常: 汇总")
     logger.info("同步app结束")
