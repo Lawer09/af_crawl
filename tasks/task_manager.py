@@ -61,15 +61,16 @@ def run():
             try:
                 if TaskDAO.should_create_new_tasks(interval_hours=CRAWLER["interval_hours"]):
                     try:
-                        # 增加郑州系统的af更新数据通知
-                        user_proxies = task_service.get_tasks_pid(tasks, 1)
-                        user_proxies.extend(task_service.get_tasks_pid(tasks, 2))
-                        user_proxies.extend(task_service.get_tasks_pid(tasks, 3))
-                        if user_proxies:
-                            msg = f""
-                            for proxy in user_proxies:
-                                msg += f"{proxy['system_type']} {proxy['pid']}\n"
-                            fs_service.send_zhengzhou_notify(f"AF 数据更新完毕\n{msg}")
+                        if SYSTEM_TYPE == "CHANGSHA":
+                            # 增加郑州系统的af更新数据通知
+                            user_proxies = task_service.get_tasks_pid(tasks, 1)
+                            user_proxies.extend(task_service.get_tasks_pid(tasks, 2))
+                            user_proxies.extend(task_service.get_tasks_pid(tasks, 3))
+                            if user_proxies:
+                                msg = f""
+                                for proxy in user_proxies:
+                                    msg += f"{proxy['system_type']} {proxy['pid']}\n"
+                                fs_service.send_zhengzhou_notify(f"AF 数据更新完毕\n{msg}")
 
                         create_pid_now_task()
                         logger.info(f"没有待处理任务且距上次更新时间超过{CRAWLER['interval_hours']}小时，已创建新任务")
