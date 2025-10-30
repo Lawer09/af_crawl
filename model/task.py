@@ -22,6 +22,7 @@ class TaskDAO:
         priority INT DEFAULT 0 COMMENT '任务优先级',
         task_type VARCHAR(64) DEFAULT NULL COMMENT '任务类型',
         task_data JSON DEFAULT NULL COMMENT '任务数据',
+        task_ret JSON DEFAULT NULL COMMENT '任务执行结果（成功/失败 app_id 及时间和原因）',
         max_retry_count INT DEFAULT 3 COMMENT '最大重试次数',
         execution_timeout INT DEFAULT 3600 COMMENT '任务执行超时时间（秒）',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -54,12 +55,30 @@ class TaskDAO:
         
         sql = f"""
         UPDATE {cls.TABLE}
-        SET task_data=%s, status=%s, next_run_at=%s, retry=%s, updated_at=NOW()
+        SET task_data=%s,
+            task_ret=COALESCE(%s, task_ret),
+            status=%s,
+            next_run_at=%s,
+            retry=%s,
+            updated_at=NOW()
         WHERE id=%s
         """
-        params = (task.get('task_data'), task.get('status'), task.get('next_run_at'), task.get('retry'), task.get('id'))
+        params = (
+            task.get('task_data'),
+            task.get('task_ret'),
+            task.get('status'),
+            task.get('next_run_at'),
+            task.get('retry'),
+            task.get('id')
+        )
 
         mysql_pool.execute(sql, params)
+
+    @classmethod
+    def update_task_ret(cls, task_id: int, task_ret: str):
+        """仅更新任务结果字段"""
+        sql = f"UPDATE {cls.TABLE} SET task_ret=%s, updated_at=NOW() WHERE id=%s"
+        mysql_pool.execute(sql, (task_ret, task_id))
 
     @classmethod
     def get_task(cls, task_id: int) -> Optional[dict]:

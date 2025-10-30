@@ -103,7 +103,7 @@ def run():
                     task["task_data"] = task_data
                     task["status"] = 'pending'
                     task["next_run_at"] = (datetime.now() + timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
-                    task["retry"] += task.get("retry", 0) + 1
+                    task["retry"] = task.get("retry", 0) + 1
                     TaskDAO.update_task(task)
                     logger.info(f"更新任务 {task['id']} 下次执行时间为 {task['next_run_at']}")
         

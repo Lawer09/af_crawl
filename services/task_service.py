@@ -22,6 +22,30 @@ def create_csv_task_data(system_type: int | None, pid: str, date: str, app_ids: 
     return json.dumps(data)
 
 
+def create_task_ret(ret_list:list[dict]) -> str:
+    import json
+
+    ret_list = [
+        {
+            "app_id": app_id,
+            "success": success,
+            "time": time,
+            "reason": reason,
+        }
+        for app_id, success, time, reason in ret_list
+    ]
+    return json.dumps(ret_list)
+
+
+def parse_task_ret(task_data: str) -> dict:
+    
+    import json
+    try:
+        return json.loads(task_data)
+    except Exception as e:
+        logger.warning("Invalid task_data format: %s", e)
+    return {}
+
 def parse_task_data(task_data: str) -> dict:
     
     import json
