@@ -89,18 +89,19 @@ def run():
 
             if task["task_type"] == "sync_af_data":
                 try:
-                    success, task_data = sync_af_data.pid_handle(task.get("task_data"))
+                    success, task_data, task_ret = sync_af_data.pid_handle(task.get("task_data"), task.get("task_ret",[]))
                 except Exception as e:
                     logger.error(f"sync_af_data.pid_handle fail: {str(e)}")
                     TaskDAO.fail_task(task["id"], 0)
                     continue
-
+                task["task_data"] = task_data
+                task["task_ret"] = task_ret
                 if success:
                     # 执行成功，更新任务状态
-                    TaskDAO.mark_done(task["id"])
+                    task["status"] = 'done'
+                    TaskDAO.update_task(task)
                 else:
                     # 执行失败，推迟执行
-                    task["task_data"] = task_data
                     task["status"] = 'pending'
                     task["next_run_at"] = (datetime.now() + timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
                     task["retry"] = task.get("retry", 0) + 1

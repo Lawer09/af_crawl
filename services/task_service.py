@@ -44,7 +44,7 @@ def parse_task_ret(task_data: str) -> dict:
         return json.loads(task_data)
     except Exception as e:
         logger.warning("Invalid task_data format: %s", e)
-    return {}
+    return []
 
 def parse_task_data(task_data: str) -> dict:
     
