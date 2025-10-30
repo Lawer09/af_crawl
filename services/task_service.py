@@ -24,7 +24,6 @@ def create_csv_task_data(system_type: int | None, pid: str, date: str, app_ids: 
 
 def create_task_ret(ret_list:list[dict]) -> str:
     import json
-
     ret_list = [
         {
             "app_id": ret.get("app_id"),

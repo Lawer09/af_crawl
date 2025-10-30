@@ -89,7 +89,7 @@ def run():
 
             if task["task_type"] == "sync_af_data":
                 try:
-                    success, task_data, task_ret = sync_af_data.pid_handle(task.get("task_data"), task.get("task_ret",[]))
+                    success, task_data, task_ret = sync_af_data.pid_handle(task.get("task_data"), task.get("task_ret","[]"))
                 except Exception as e:
                     logger.error(f"sync_af_data.pid_handle fail: {str(e)}")
                     TaskDAO.fail_task(task["id"], 0)
