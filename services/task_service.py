@@ -27,8 +27,9 @@ def create_task_ret(ret_list:list[dict]) -> str:
     ret_list = [
         {
             "app_id": ret.get("app_id"),
-            "success": ret.get("success"),
-            "time": ret.get("time"),
+            "status": ret.get("status"),
+            "start_time": ret.get("start_time"),
+            "end_time": ret.get("end_time"),
             "reason": ret.get("reason"),
         }
         for ret in ret_list
