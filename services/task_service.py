@@ -37,7 +37,7 @@ def create_task_ret(ret_list:list[dict]) -> str:
     return json.dumps(ret_list)
 
 
-def parse_task_ret(task_data: str) -> dict:
+def parse_task_ret(task_data: str) -> list:
     
     import json
     try:
