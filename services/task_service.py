@@ -27,12 +27,12 @@ def create_task_ret(ret_list:list[dict]) -> str:
 
     ret_list = [
         {
-            "app_id": app_id,
-            "success": success,
-            "time": time,
-            "reason": reason,
+            "app_id": ret.get("app_id"),
+            "success": ret.get("success"),
+            "time": ret.get("time"),
+            "reason": ret.get("reason"),
         }
-        for app_id, success, time, reason in ret_list
+        for ret in ret_list
     ]
     return json.dumps(ret_list)
 
@@ -43,7 +43,7 @@ def parse_task_ret(task_data: str) -> dict:
     try:
         return json.loads(task_data)
     except Exception as e:
-        logger.warning("Invalid task_data format: %s", e)
+        logger.warning("Invalid task_ret format: %s", e)
     return []
 
 def parse_task_data(task_data: str) -> dict:
