@@ -187,6 +187,13 @@ class TaskDAO:
         )
 
     @classmethod
+    def zero_task(cls):
+        #将所有pending的任务的 status 设置为 zero
+        mysql_pool.execute(
+            f"UPDATE {cls.TABLE} SET status='zero' WHERE status='pending'"
+        )
+
+    @classmethod
     def fail_task_batch(cls, task_ids: List[int], retry_delay_sec: int) -> int:
         """批量标记任务为失败，并增加重试次数"""
         if not task_ids:

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def pid_handle(task_data_str:str, task_ret_str:str):
     """执行任务"""
-
+    
     task_data = task_service.parse_task_data(task_data_str)
     pid = task_data.get('pid')
     date = task_data.get('date')
@@ -28,18 +28,23 @@ def pid_handle(task_data_str:str, task_ret_str:str):
     new_app_ids = app_ids.copy()
     app_retry_count = task_data.get('app_retry_count', {})
     for app_id in app_ids:
-        app_ret = {
-            "app_id":app_id,
-            "status":"start",
-            "start_time":time.time(),
-            "reason":"",
-        }
+        app_ret = None
+        app_rets = list(filter(lambda x: x.get('app_id') == app_id, task_ret))
+        if app_rets:
+            app_ret = app_rets[0]
+        else:
+            app_ret = {
+                "app_id":app_id,
+                "status":"start",
+                "start_time":time.time(),
+                "reason":"",
+            }
         task_ret.append(app_ret)
         retry_count = app_retry_count.get(app_id, 0)
         if retry_count > 1:
             logger.info(f"{app_id} 已重试次数={retry_count}，跳过")
             app_ret["status"] = "fail"
-            app_ret["reason"] =  f"{app_ret.get('reason', '')}|pid={pid} 已重试次数={retry_count}，跳过"
+            app_ret["reason"] =  f"{app_ret.get('reason', '')}|pid={pid} 已重试次={retry_count}"
             app_ret["end_time"] = time.time()
             new_app_ids.remove(app_id)
             continue

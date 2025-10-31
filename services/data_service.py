@@ -60,14 +60,11 @@ def parse_af_csv(text: str):
     idx_clicks = find_idx(["clicks"])
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
-        "installs",
-        "installs appsflyer",
-        "installs-ua appsflyer",
-        "installs-retarget appsflyer",
+        "installs"
     ])
 
     if None in (idx_adgroup, idx_adgroup_id, idx_clicks, idx_installs):
-        raise ValueError(f"CSV 字段缺失，header={header}")
+        raise ValueError(f"返回字段缺失，{header}")
 
     out = []
     max_idx = max(idx_adgroup, idx_adgroup_id, idx_clicks, idx_installs)
