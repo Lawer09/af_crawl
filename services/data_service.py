@@ -57,12 +57,10 @@ def parse_af_csv(text: str):
 
     idx_adgroup = find_idx([AF_DATA_FILTERS["groups_dim1"]])
     idx_adgroup_id = find_idx([AF_DATA_FILTERS["groups_dim2"]])
-    idx_clicks = find_idx(["clicks"])
+    idx_clicks = find_idx(["clicks"]) or 999 # 可忽略
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
         "installs",
-        'installs appsflyer', 
-        'installs-ua appsflyer',
         'installs appsflyer', 
         'installs-ua appsflyer',
     ])
@@ -79,8 +77,10 @@ def parse_af_csv(text: str):
         adgroup_id = row[idx_adgroup_id].strip()
         if not adgroup or adgroup == "None":
             continue
-        # 容错：空字符串当 0
-        clicks = int((row[idx_clicks] or "0").strip() or 0)
+        if idx_clicks == 999:
+            clicks = -1 # 标识没有这个字段
+        else:
+            clicks = int((row[idx_clicks] or "0").strip() or 0)
         installs = int((row[idx_installs] or "0").strip() or 0)
 
         out.append({
