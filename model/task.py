@@ -39,14 +39,14 @@ class TaskDAO:
         logger.info(f"Table {cls.TABLE} initialized.")
 
     @classmethod
-    def add_task(cls, task_type:str, task_data:str, next_run_at:str, priority:int=0, execution_timeout:int=3600, max_retry_count:int=3):
+    def add_task(cls, task_type:str, task_data:str, next_run_at:str, status:str='pending', task_ret:str=None, priority:int=0, execution_timeout:int=3600, max_retry_count:int=3):
         """添加任务"""
         sql = f"""
         INSERT INTO {cls.TABLE}
-            (task_type, task_data, next_run_at, priority, execution_timeout, max_retry_count)
-        VALUES (%s,%s,%s,%s,%s,%s)
+            (status, task_type, task_data, task_ret, next_run_at, priority, execution_timeout, max_retry_count)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
         """
-        params = (task_type, task_data, next_run_at, priority, execution_timeout, max_retry_count)
+        params = (status, task_type, task_data, task_ret, next_run_at, priority, execution_timeout, max_retry_count)
         mysql_pool.execute(sql, params)
     
     @classmethod
