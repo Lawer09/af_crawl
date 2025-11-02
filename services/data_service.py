@@ -48,15 +48,29 @@ def parse_af_csv(text: str):
         return []
 
     header = [h.strip() for h in lines[0]]
+    header_lower = [h.lower() for h in header]
 
     def find_idx(candidates):
         for name in candidates:
-            if name in header:
-                return header.index(name)
+            if not name:
+                continue
+            nl = name.lower()
+            if nl in header_lower:
+                return header_lower.index(nl)
         return None
 
-    idx_adgroup = find_idx([AF_DATA_FILTERS["groups_dim1"],"AD"])
-    idx_adgroup_id = find_idx([AF_DATA_FILTERS["groups_dim2"],"AD ID"])
+    idx_adgroup = find_idx([
+        AF_DATA_FILTERS.get("groups_dim1", "adgroup"),
+        "AD",
+        "Ad",
+        "adgroup",
+    ])
+    idx_adgroup_id = find_idx([
+        AF_DATA_FILTERS.get("groups_dim2", "adgroup-id"),
+        "adgroup id",
+        "AD ID",
+        "Ad ID",
+    ])
     idx_clicks = find_idx(["clicks"]) or 999 # 可忽略
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
@@ -181,7 +195,10 @@ def fetch_csv_by_pid(pid:str, app_id:str, date:str):
 
     payload = cfg.CSV_DATA_PARAM.copy()
     payload["dates"] = {"start": date, "end": date}
-    payload["groupings"] = [{"dimension":AF_DATA_FILTERS["groups_dim1"]},{"dimension":AF_DATA_FILTERS["groups_dim2"]}]
+    payload["groupings"] = [
+        {"dimension": AF_DATA_FILTERS.get("groups_dim1", "adgroup")},
+        {"dimension": AF_DATA_FILTERS.get("groups_dim2", "adgroup-id")},
+    ]
     payload["filters"]["app-id"] = [app_id]
 
     try:
