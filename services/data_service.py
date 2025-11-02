@@ -55,8 +55,8 @@ def parse_af_csv(text: str):
                 return header.index(name)
         return None
 
-    idx_adgroup = find_idx([AF_DATA_FILTERS["groups_dim1"]])
-    idx_adgroup_id = find_idx([AF_DATA_FILTERS["groups_dim2"]])
+    idx_adgroup = find_idx([AF_DATA_FILTERS["groups_dim1"],"AD"])
+    idx_adgroup_id = find_idx([AF_DATA_FILTERS["groups_dim2", "AD ID"]])
     idx_clicks = find_idx(["clicks"]) or 999 # 可忽略
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
