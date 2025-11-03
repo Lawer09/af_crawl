@@ -62,24 +62,23 @@ def parse_af_csv(text: str):
     idx_adgroup = find_idx([
         AF_DATA_FILTERS.get("groups_dim1", "adgroup"),
         "AD",
-        "Ad",
         "adgroup",
     ])
     idx_adgroup_id = find_idx([
         AF_DATA_FILTERS.get("groups_dim2", "adgroup-id"),
         "adgroup id",
         "AD ID",
-        "Ad ID",
     ])
     idx_clicks = find_idx(["clicks"]) or 999 # 可忽略
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
         "installs",
-        'installs appsflyer', 
-        'installs-ua appsflyer',
-    ])
+        "Installs appsflyer",
+        "installs-ua appsflyer",
+        "installs-retarget appsflyer",
+    ]) or 999
 
-    if None in (idx_adgroup, idx_adgroup_id, idx_clicks, idx_installs):
+    if None in (idx_adgroup, idx_adgroup_id):
         raise ValueError(f"返回字段缺失，当前head={header}")
 
     out = []
@@ -95,7 +94,10 @@ def parse_af_csv(text: str):
             clicks = -1 # 标识没有这个字段
         else:
             clicks = int((row[idx_clicks] or "0").strip() or 0)
-        installs = int((row[idx_installs] or "0").strip() or 0)
+        if idx_installs == 999:
+            installs = -1 # 标识没有这个字段
+        else:
+            installs = int((row[idx_installs] or "0").strip() or 0)
 
         out.append({
             "offer_id": adgroup,
