@@ -28,6 +28,7 @@ def pid_handle(task_data_str:str, task_ret_str:str):
 
     new_app_ids = app_ids.copy()
     app_retry_count = task_data.get('app_retry_count', {})
+    system_type = task_data.get('system_type')
     for app_id in app_ids:
         app_ret = None
         app_rets = list(filter(lambda x: x.get('app_id') == app_id, task_ret))
@@ -52,6 +53,7 @@ def pid_handle(task_data_str:str, task_ret_str:str):
                 "pid":pid,
                 "app_id":app_id,
                 "fetch_date":date,
+                "system_type":system_type,
                 "status":"fail",
                 "reason":f"pid={pid} 已重试次={retry_count}",
                 "start_time":app_ret["start_time"],
@@ -76,6 +78,7 @@ def pid_handle(task_data_str:str, task_ret_str:str):
                 "pid":pid,
                 "app_id":app_id,
                 "fetch_date":date,
+                "system_type":system_type,
                 "status":task.DONE,
                 "reason":f"用时={elapsed:.2f}s rows={len(rows)}",
                 "start_time":app_ret["start_time"],
@@ -91,11 +94,12 @@ def pid_handle(task_data_str:str, task_ret_str:str):
             af_task_ret_data.append({
                 "pid":pid,
                 "app_id":app_id,
+                "system_type":system_type,
                 "fetch_date":date,
                 "status":task.FAIL,
                 "reason":str(e),
-                "start_time":app_ret["start_time"],
-                "end_time":app_ret["end_time"],
+                "start_at":app_ret["start_time"],
+                "end_at":app_ret["end_time"],
             })
             af_task_ret_service.add_task_ret_list(af_task_ret_data)
             return False, task_service.create_csv_task_data(system_type=task_data.get('system_type'), pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count), task_service.create_task_ret(task_ret)
