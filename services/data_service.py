@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timedelta
 import config.af_config as cfg
 from config.settings import AF_DATA_FILTERS, CRAWLER, SYSTEM_TYPE
+from model.task import AfTaskRetDAO
 from services.fs_service import send_message
 from services.login_service import get_session_by_pid
 from model.user_app_data import UserAppDataDAO
@@ -377,6 +378,8 @@ def try_get_by_pid_and_offer_id(pid: str, app_id: str, aff_id: str, offer_id: st
     rows = try_get_and_save_data(
         pid=pid, app_id=app_id, aff_id=aff_id, date=date
     )
+
+    
 
     if offer_id:
         rows = list(filter(lambda x: x["offer_id"] == offer_id, rows))

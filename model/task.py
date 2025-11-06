@@ -40,7 +40,7 @@ class AfTaskRetDAO:
       `status` VARCHAR(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL,
       `start_at` TIMESTAMP NULL DEFAULT NULL,
       `end_at` TIMESTAMP NULL DEFAULT NULL,
-      `ret` VARCHAR(255) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL COMMENT '结果信息',
+      `reason` VARCHAR(255) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL COMMENT '结果信息',
       `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (`id`) USING BTREE,
       INDEX `idx_pid`(`pid` ASC) USING BTREE,
@@ -69,17 +69,17 @@ class AfTaskRetDAO:
                status: str | None,
                start_at,
                end_at,
-               ret: str | None) -> int:
+               reasib: str | None) -> int:
         """插入一条爬取结果记录。
 
         返回受影响行数。
         """
         sql = (
             f"INSERT INTO {cls.TABLE} "
-            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, ret) "
+            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, reasib) "
             f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
         )
-        params = (system_type, pid, fetch_date, app_id, status, start_at, end_at, ret)
+        params = (system_type, pid, fetch_date, app_id, status, start_at, end_at, reasib)
         try:
             return mysql_pool.execute(sql, params)
         except Exception as e:
