@@ -24,7 +24,7 @@ class AfTaskRetDAO:
       - status VARCHAR(10)
       - start_at TIMESTAMP
       - end_at TIMESTAMP
-      - ret VARCHAR(255)
+      - reason VARCHAR(255)
       - created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     """
 
@@ -142,13 +142,13 @@ class AfTaskRetDAO:
         """
         if not rows:
             return 0
-        sql = f"UPDATE {cls.TABLE} SET status=%s, start_at=%s, end_at=%s, ret=%s WHERE id=%s"
+        sql = f"UPDATE {cls.TABLE} SET status=%s, start_at=%s, end_at=%s, reason=%s WHERE id=%s"
         params = [
             (
                 r.get("status"),
                 r.get("start_at"),
                 r.get("end_at"),
-                r.get("ret"),
+                r.get("reason"),
                 r.get("id"),
             )
             for r in rows
