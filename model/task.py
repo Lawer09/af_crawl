@@ -96,7 +96,7 @@ class AfTaskRetDAO:
             return 0
         sql = (
             f"INSERT INTO {cls.TABLE} "
-            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, ret) "
+            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, reason) "
             f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
         )
         params = [
@@ -108,7 +108,7 @@ class AfTaskRetDAO:
                 r.get("status"),
                 r.get("start_at"),
                 r.get("end_at"),
-                r.get("ret"),
+                r.get("reason"),
             )
             for r in rows
         ]
