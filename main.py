@@ -170,7 +170,7 @@ if __name__ == "__main__":
     elif args.command == "create_tasks":
         from services import task_service
         logger.info("=== create_tasks start ===")
-        task_service.create_pid_now_task()
+        task_service.create_af_now_task()
     
     elif args.command == "init_data":
         from scripts import system_init

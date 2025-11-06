@@ -1,7 +1,8 @@
 import random
 import time
-
-from services import data_service, task_service
+from datetime import datetime
+from model import task
+from services import af_task_ret_service, data_service, task_service
 
 import logging
 import logging
@@ -9,10 +10,8 @@ from core.logger import setup_logging  # noqa
 
 logger = logging.getLogger(__name__)
 
-
 def pid_handle(task_data_str:str, task_ret_str:str):
     """执行任务"""
-    
     task_data = task_service.parse_task_data(task_data_str)
     pid = task_data.get('pid')
     date = task_data.get('date')
@@ -25,6 +24,8 @@ def pid_handle(task_data_str:str, task_ret_str:str):
     
     logger.info(f"开始任务 pid={pid} date={date}")
     
+    af_task_ret_data = []
+
     new_app_ids = app_ids.copy()
     app_retry_count = task_data.get('app_retry_count', {})
     for app_id in app_ids:
@@ -36,7 +37,7 @@ def pid_handle(task_data_str:str, task_ret_str:str):
             app_ret = {
                 "app_id":app_id,
                 "status":"start",
-                "start_time":time.time(),
+                "start_time":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "reason":"",
             }
         task_ret.append(app_ret)
@@ -45,8 +46,17 @@ def pid_handle(task_data_str:str, task_ret_str:str):
             logger.info(f"{app_id} 已重试次数={retry_count}，跳过")
             app_ret["status"] = "fail"
             app_ret["reason"] =  f"{app_ret.get('reason', '')}|pid={pid} 已重试次={retry_count}"
-            app_ret["end_time"] = time.time()
+            app_ret["end_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             new_app_ids.remove(app_id)
+            af_task_ret_data.append({
+                "pid":pid,
+                "app_id":app_id,
+                "fetch_date":date,
+                "status":"fail",
+                "reason":f"pid={pid} 已重试次={retry_count}",
+                "start_time":app_ret["start_time"],
+                "end_time":app_ret["end_time"],
+            })
             continue
         
         try:
@@ -61,13 +71,34 @@ def pid_handle(task_data_str:str, task_ret_str:str):
             time.sleep(random.uniform(1, 3))
             app_ret["status"] = "success"
             app_ret["reason"] = f"{app_ret.get('reason', '')}|成功 pid={pid} 用时={elapsed:.2f}s rows={len(rows)}"
-            app_ret["end_time"] = time.time()
+            app_ret["end_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            af_task_ret_data.append({
+                "pid":pid,
+                "app_id":app_id,
+                "fetch_date":date,
+                "status":task.DONE,
+                "reason":f"用时={elapsed:.2f}s rows={len(rows)}",
+                "start_time":app_ret["start_time"],
+                "end_time":app_ret["end_time"],
+            })
             new_app_ids.remove(app_id)
         except Exception as e:
             logger.error(f"task fail processing {app_id}: {str(e)}")
             app_retry_count[app_id] = retry_count + 1
             app_ret["status"] = "fail"
+            app_ret["end_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")   
             app_ret["reason"] =  f"{app_ret.get('reason', '')}|pid={pid} 获取失败: {str(e)}"
+            af_task_ret_data.append({
+                "pid":pid,
+                "app_id":app_id,
+                "fetch_date":date,
+                "status":task.FAIL,
+                "reason":str(e),
+                "start_time":app_ret["start_time"],
+                "end_time":app_ret["end_time"],
+            })
+            af_task_ret_service.add_task_ret_list(af_task_ret_data)
             return False, task_service.create_csv_task_data(system_type=task_data.get('system_type'), pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count), task_service.create_task_ret(task_ret)
 
+    af_task_ret_service.add_task_ret_list(af_task_ret_data)
     return not new_app_ids, task_service.create_csv_task_data(system_type=task_data.get('system_type'), pid=pid, date=date, app_ids=new_app_ids, app_retry_count=app_retry_count), task_service.create_task_ret(task_ret)

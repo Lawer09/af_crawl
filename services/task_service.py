@@ -1,7 +1,9 @@
+from re import S
+from datetime import datetime
 from model.offer import OfferDAO
 import logging
 
-from model.task import TaskDAO
+from model.task import AfTaskRetDAO, TaskDAO
 from model.user import UserProxyDAO
 from model.user_app import UserAppDAO
 from services import fs_service, proxy_service
@@ -59,6 +61,19 @@ class OldAppDataErr(Exception):
     """旧版app数据"""
     pass
 
+def create_af_task_ret_data(pid:str, date:str, app_ids:set, system_type:int) -> list:
+    """创建任务返回数据"""
+    ret_list = []
+    for app_id in app_ids:
+        ret_list.append({
+            "system_type": system_type,
+            "pid": pid,
+            "fetch_date":date,
+            "app_id": app_id,
+            "status": "pending",
+        })
+    return ret_list
+
 def add_pid_app_data_task(pid: str, date: str, system_type: int | None = None):
     """添加pid任务, date 爬取日期（可携带 system_type）"""
     try:
@@ -91,6 +106,9 @@ def add_pid_app_data_task(pid: str, date: str, system_type: int | None = None):
             logger.info(f"{pid} : apps is not in af user apps")
             raise OldAppDataErr(f"pid={pid} app没有在af app列表中的数据")
 
+        ret_list = create_af_task_ret_data(pid=pid, date=date, app_ids=sys_app_id_set, system_type=system_type)
+        AfTaskRetDAO.insert_many(ret_list)
+        
         task_data = create_csv_task_data(system_type=system_type, pid=pid, date=date, app_ids=sys_app_id_set)
         TaskDAO.add_task(task_type='sync_af_data',
             task_data=task_data,
@@ -120,6 +138,7 @@ def create_pid_task(date:str) -> None:
     根据配置的静态代理 pid 并根据 活跃的offer 的 af数据任务
     """
     TaskDAO.init_table()
+    AfTaskRetDAO.init_table()
 
     user_proxies = UserProxyDAO.get_enable()
     if not user_proxies:
@@ -145,11 +164,12 @@ def create_pid_task(date:str) -> None:
 
     update_app_data_pids = set()
     for pid in pids:
+        system_type = pid_system_type_map.get(pid)
         try:
             add_pid_app_data_task(
                 pid=pid,
                 date=date,
-                system_type=pid_system_type_map.get(pid)
+                system_type=system_type
             )
         except OldAppDataErr as e:
             # 需要更新App数据
@@ -158,7 +178,7 @@ def create_pid_task(date:str) -> None:
             logger.error(f"add_pid_app_data_task fail: {str(e)}")
     fs_service.send_sys_notify(f"需要更新App数据的pid如下\n{','.join(update_app_data_pids)}")
 
-def create_pid_now_task():
+def create_af_now_task():
     """创建应用数据任务, csv 数据, 昨天日期"""
     from datetime import datetime, timedelta
 

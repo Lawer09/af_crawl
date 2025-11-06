@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 from model.user import UserProxyDAO
 from services import fs_service
 from tasks import sync_af_data
-from services.task_service import create_pid_now_task
+from services.task_service import create_af_now_task
 
 def run():
     """运行任务"""
@@ -31,7 +31,7 @@ def run():
             last_midnight_date = current_date
 
         if now.hour == 1 and last_1am_date != current_date:
-            create_pid_now_task()
+            create_af_now_task()
             last_1am_date = current_date
 
         # 获取任务
@@ -40,7 +40,7 @@ def run():
             logger.info("没有待处理任务")
             try:
                 if TaskDAO.should_create_new_tasks(interval_hours=CRAWLER["interval_hours"]):
-                    create_pid_now_task()
+                    create_af_now_task()
                     logger.info(f"没有待处理任务且距上次更新时间超过{CRAWLER['interval_hours']}小时，已创建新任务")
                     fs_service.send_sys_notify("添加 AF APP DATA 任务")
             except Exception as e:

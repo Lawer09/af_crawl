@@ -7,6 +7,161 @@ from core.db import mysql_pool
 
 logger = logging.getLogger(__name__)
 
+PENDING = "pending"
+DONE = "done"
+FAIL = "fail"
+ZERO = "zero"
+
+class AfTaskRetDAO:
+    """AF 爬取结果记录表 DAO
+
+    表结构：af_crawl_ret
+    字段：
+      - system_type INT
+      - pid VARCHAR(30)
+      - fetch_date CHAR(10)
+      - app_id VARCHAR(100)
+      - status VARCHAR(10)
+      - start_at TIMESTAMP
+      - end_at TIMESTAMP
+      - ret VARCHAR(255)
+      - created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    """
+
+    TABLE = "af_crawl_ret"
+
+    CREATE_SQL = f"""
+    CREATE TABLE IF NOT EXISTS `{TABLE}` (
+      `id` INT NOT NULL AUTO_INCREMENT,
+      `system_type` INT NULL DEFAULT NULL,
+      `pid` VARCHAR(30) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NOT NULL,
+      `fetch_date` CHAR(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL COMMENT '数据的日期 UTC',
+      `app_id` VARCHAR(100) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL,
+      `status` VARCHAR(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL,
+      `start_at` TIMESTAMP NULL DEFAULT NULL,
+      `end_at` TIMESTAMP NULL DEFAULT NULL,
+      `ret` VARCHAR(255) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NULL DEFAULT NULL COMMENT '结果信息',
+      `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`) USING BTREE,
+      INDEX `idx_pid`(`pid` ASC) USING BTREE,
+      INDEX `idx_app_id`(`app_id` ASC) USING BTREE,
+      INDEX `idx_fetch_date`(`fetch_date` ASC) USING BTREE,
+      INDEX `idx_status`(`status` ASC) USING BTREE,
+      INDEX `idx_created_at`(`created_at` ASC) USING BTREE
+    ) ENGINE=InnoDB CHARACTER SET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='记录af数据爬取的结果' ROW_FORMAT=Dynamic;
+    """
+
+    @classmethod
+    def init_table(cls):
+        """初始化表结构（存在则跳过）。"""
+        try:
+            mysql_pool.execute(cls.CREATE_SQL)
+            logger.info("Table %s initialized.", cls.TABLE)
+        except Exception as e:
+            logger.exception("Init table %s failed: %s", cls.TABLE, e)
+
+    @classmethod
+    def insert(cls,
+               system_type: int | None,
+               pid: str,
+               fetch_date: str | None,
+               app_id: str | None,
+               status: str | None,
+               start_at,
+               end_at,
+               ret: str | None) -> int:
+        """插入一条爬取结果记录。
+
+        返回受影响行数。
+        """
+        sql = (
+            f"INSERT INTO {cls.TABLE} "
+            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, ret) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+        )
+        params = (system_type, pid, fetch_date, app_id, status, start_at, end_at, ret)
+        try:
+            return mysql_pool.execute(sql, params)
+        except Exception as e:
+            logger.exception("AfTaskRetDAO.insert failed: pid=%s app_id=%s date=%s status=%s err=%s", pid, app_id, fetch_date, status, e)
+            return 0
+
+    @classmethod
+    def insert_many(cls, rows: List[Dict]) -> int:
+        """批量插入爬取结果记录。rows 为包含上述字段键的字典列表。
+
+        返回受影响行数。
+        """
+        if not rows:
+            return 0
+        sql = (
+            f"INSERT INTO {cls.TABLE} "
+            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, ret) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+        )
+        params = [
+            (
+                r.get("system_type"),
+                r.get("pid"),
+                r.get("fetch_date"),
+                r.get("app_id"),
+                r.get("status"),
+                r.get("start_at"),
+                r.get("end_at"),
+                r.get("ret"),
+            )
+            for r in rows
+        ]
+        try:
+            return mysql_pool.executemany(sql, params)
+        except Exception as e:
+            logger.exception("AfTaskRetDAO.insert_many failed: count=%d err=%s", len(rows), e)
+            return 0
+
+    @classmethod
+    def get_by_status(cls, status: str, limit: int = 200) -> List[Dict]:
+        """根据状态查询记录，按创建时间倒序返回。
+
+        参数：
+          - status: 记录状态（如 'done' / 'fail' 等）
+          - limit: 返回条数限制，默认 200
+        返回：记录列表（字典数组）
+        """
+        try:
+            sql = f"SELECT * FROM {cls.TABLE} WHERE status=%s ORDER BY created_at DESC LIMIT %s"
+            return mysql_pool.select(sql, (status, limit))
+        except Exception as e:
+            logger.exception("AfTaskRetDAO.get_by_status failed: status=%s err=%s", status, e)
+            return []
+
+    @classmethod
+    def update_many(cls, rows: List[Dict]) -> int:
+        """批量更新记录。每项需包含 id 以及要更新的字段：status, start_at, end_at, ret。
+
+        返回受影响行数。
+        """
+        if not rows:
+            return 0
+        sql = f"UPDATE {cls.TABLE} SET status=%s, start_at=%s, end_at=%s, ret=%s WHERE id=%s"
+        params = [
+            (
+                r.get("status"),
+                r.get("start_at"),
+                r.get("end_at"),
+                r.get("ret"),
+                r.get("id"),
+            )
+            for r in rows
+            if r.get("id") is not None
+        ]
+        if not params:
+            return 0
+        try:
+            return mysql_pool.executemany(sql, params)
+        except Exception as e:
+            logger.exception("AfTaskRetDAO.update_many failed: count=%d err=%s", len(params), e)
+            return 0
+
 
 class TaskDAO:
     """任务表: 支持失败延迟、重启续跑"""
