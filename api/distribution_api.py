@@ -193,6 +193,28 @@ def test_all_proxy_stability(
 
 
 # 通过 pid 查询用户账号并获取数据（GET）
+@router.get("/proxy/pid")
+def save_pid_proxy(
+    pid: str = Query(..., description="用户PID"),
+    system_type: str = Query(..., description="系统类型"),
+    proxy_url: str = Query(..., description="代理URL"),
+):
+    """通过 pid 获取账号信息后拉取用户 app 数据"""
+    try:
+        rows = proxy_service.add_pid_proxy(
+            pid=pid,
+            proxy_url = proxy_url,
+            system_type = system_type
+        )
+        return {"status": "success", "data": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching user app data by pid: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 通过 pid 查询用户账号并获取数据（GET）
 @router.get("/user/app/data")
 def get_user_app_data_by_pid(
     pid: str = Query(..., description="用户PID（存储于af_user.email，当account_type='pid')"),

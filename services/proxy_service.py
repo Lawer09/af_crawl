@@ -1,17 +1,40 @@
 from __future__ import annotations
 
 import logging
+import os
+import random
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 import requests
 from urllib.parse import urlparse, urlunparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from model.user import UserProxyDAO
-import config.af_config as cfg
 
 logger = logging.getLogger(__name__)
+
+
+UA_INFO = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.100 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.101 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.97 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.158 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.97 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.138 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.158 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.97 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.127 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.138 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.127 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.127 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.101 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.100 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.127 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.7204.169 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.7258.128 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.128 Safari/537.36",
+]
 
 
 def _mask_proxy_for_log(proxy_url: str) -> str:
@@ -100,6 +123,38 @@ def _test_once(proxy_url: str, ua: Optional[str], test_url: str, timeout: int = 
         err_msg = str(e)
         logger.debug("_test_once exception: %s - %s", err_type, err_msg)
         return False, elapsed_ms, status, err_type, err_msg
+
+
+def fetch_country_timezone_via_ipinfo(proxy_url: str, timeout: int = 8) -> Tuple[Optional[str], Optional[str]]:
+    """通过指定代理访问 ipinfo 并解析国家与时区。
+
+    - 使用 `https://ipinfo.io/json` 接口（若配置了 `IPINFO_TOKEN`，则附带 token）。
+    - 仅返回两个字段：country（国家简称，如 US/SG）与 timezone（如 Asia/Shanghai）。
+    """
+    if not proxy_url:
+        return None, None
+
+    # 清洗代理 URL，保持与稳定性测试一致的格式
+    cleaned, valid, reason = _sanitize_proxy_url(proxy_url)
+    if not valid:
+        logger.warning("fetch_country_timezone invalid proxy_url: %s (reason=%s)", _mask_proxy_for_log(cleaned), reason)
+
+    token = os.environ.get("IPINFO_TOKEN", "").strip()
+    url = "https://ipinfo.io/json" if not token else f"https://ipinfo.io/json?token={token}"
+    try:
+        sess = requests.Session()
+        sess.trust_env = False
+        resp = sess.get(url, proxies={"http": cleaned, "https": cleaned}, timeout=timeout)
+        if resp.status_code >= 400:
+            logger.warning("ipinfo call failed via proxy %s: status=%s", _mask_proxy_for_log(cleaned), resp.status_code)
+            return None, None
+        data = resp.json() if resp.headers.get("Content-Type", "").startswith("application/json") else {}
+        country = data.get("country")
+        timezone = data.get("timezone")
+        return (country if country else None), (timezone if timezone else None)
+    except Exception as e:
+        logger.debug("ipinfo via proxy error: %s", e)
+        return None, None
 
 
 def validate_user_proxies_stability(
@@ -321,3 +376,59 @@ def validate_proxy_stability_for_pid(
         if r.get("pid") == pid:
             return r
     return {"pid": pid, "proxy_url": rec.get("proxy_url"), "attempts": 0, "success": 0, "success_rate": 0.0, "avg_latency_ms": None, "statuses": [], "errors": ["not tested"]}
+
+
+def add_pid_proxy(pid: str, proxy_url: str, system_type: int) -> bool:
+    """
+    为指定 pid 添加代理 URL。
+    """
+    # 输入校验与错误抛出
+    if not isinstance(pid, str) or not pid.strip():
+        msg = f"Invalid pid: {pid!r}"
+        logger.warning(msg)
+        raise ValueError(msg)
+
+    # 允许 API 传入字符串 system_type，做转换与校验
+    try:
+        system_val = int(system_type)
+    except Exception:
+        msg = f"Invalid system_type (not int): {system_type!r}"
+        logger.warning(msg)
+        raise ValueError(msg)
+    if system_val < 1 or system_val > 32:
+        msg = f"Invalid system_type range: {system_val} (expected 1..32)"
+        logger.warning(msg)
+        raise ValueError(msg)
+
+    # 代理 URL 基本清洗与校验（先行校验，避免后续异常不明确）
+    cleaned_url, valid, reason = _sanitize_proxy_url(proxy_url)
+    if not valid:
+        msg = f"Invalid proxy_url: {_mask_proxy_for_log(cleaned_url)} (reason={reason})"
+        logger.warning(msg)
+        raise ValueError(msg)
+
+    # 添加代理信息（带国家与时区）
+    ua = UA_INFO[random.randint(0, len(UA_INFO) - 1)]
+    country, timezone = fetch_country_timezone_via_ipinfo(cleaned_url)
+    if country is None or timezone is None:
+        logger.warning(
+            "ipinfo lookup missing fields: pid=%s url=%s country=%s timezone=%s",
+            pid,
+            _mask_proxy_for_log(cleaned_url),
+            country,
+            timezone,
+        )
+
+    ok = UserProxyDAO.add_or_update(
+        pid=pid,
+        proxy_url=cleaned_url,
+        system=system_val,
+        user_agent=ua,
+        country=country,
+        timezone_id=timezone,
+    )
+    if not ok:
+        msg = f"UserProxyDAO.add_or_update failed for pid={pid}"
+        logger.error(msg)
+        raise RuntimeError(msg)
+    return True

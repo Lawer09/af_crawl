@@ -236,3 +236,51 @@ class UserProxyDAO:
         except Exception as e:
             logger.error(f"Error fetching enabled user proxies: {e}")
             return []
+
+    @classmethod
+    def add_or_update(
+        cls,
+        pid: str,
+        proxy_url: str,
+        system: int,
+        user_agent: Optional[str] = None,
+        country: Optional[str] = None,
+        timezone_id: Optional[str] = None,
+    ) -> bool:
+        """新增或更新静态代理配置（按 pid 唯一）。
+
+        - 清洗并校验 `proxy_url`（自动补 http://，校验主机与端口格式）。
+        - 若存在记录则更新字段：`proxy_url`, `system_type`, `ua`, `country`, `timezone_id`。
+        - 若不存在则插入一条记录，默认 `deactivate=0`。
+        """
+        try:
+            if not pid:
+                logger.warning("add_or_update invalid pid")
+                return False
+
+            sanitized, err = _sanitize_proxy_url(proxy_url)
+            if not sanitized:
+                logger.warning("add_or_update invalid proxy_url: pid=%s url=%s err=%s", pid, _mask_proxy_for_log(proxy_url), err)
+                # 允许写入空代理，以便后续补充
+                sanitized = ""
+
+            rows = mysql_pool.select(f"SELECT id FROM {cls.TABLE} WHERE pid = %s LIMIT 1", (pid,))
+            if rows:
+                rid = rows[0]["id"]
+                sql = (
+                    f"UPDATE {cls.TABLE} SET proxy_url=%s, system_type=%s, ua=%s, country=%s, timezone_id=%s "
+                    f"WHERE id=%s"
+                )
+                mysql_pool.execute(sql, (sanitized, system, user_agent, country, timezone_id, rid))
+                logger.info("Updated static proxy: pid=%s url=%s system=%s country=%s tz=%s", pid, _mask_proxy_for_log(sanitized), system, country, timezone_id)
+            else:
+                sql = (
+                    f"INSERT INTO {cls.TABLE} (pid, proxy_url, system_type, ua, country, timezone_id, deactivate) "
+                    f"VALUES (%s,%s,%s,%s,%s,%s,0)"
+                )
+                mysql_pool.execute(sql, (pid, sanitized, system, user_agent, country, timezone_id))
+                logger.info("Inserted static proxy: pid=%s url=%s system=%s country=%s tz=%s", pid, _mask_proxy_for_log(sanitized), system, country, timezone_id)
+            return True
+        except Exception as e:
+            logger.exception("UserProxyDAO.add_or_update failed: pid=%s err=%s", pid, e)
+            return False

@@ -26,11 +26,11 @@ def run():
         # 0点/1点定时任务
         now = datetime.now()
         current_date = now.date()
-        if now.hour == 0 and last_midnight_date != current_date:
+        if now.hour == 2 and last_midnight_date != current_date:
             TaskDAO.zero_task()
             last_midnight_date = current_date
 
-        if now.hour == 1 and last_1am_date != current_date:
+        if now.hour == 8 and last_1am_date != current_date:
             create_af_now_task()
             last_1am_date = current_date
 
