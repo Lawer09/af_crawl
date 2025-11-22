@@ -2,6 +2,7 @@
 
 import logging
 import time
+from zoneinfo import ZoneInfo
 from config.settings import CRAWLER, SYSTEM_TYPE
 from model.task import TaskDAO
 from datetime import datetime, timedelta
@@ -24,13 +25,13 @@ def run():
 
     while True:
         # 0点/1点定时任务
-        now = datetime.now()
-        current_date = now.date()
-        if now.hour == 2 and last_midnight_date != current_date:
+        utc8_now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        current_date = utc8_now.date()
+        if utc8_now.hour == 2 and last_midnight_date != current_date:
             TaskDAO.zero_task()
             last_midnight_date = current_date
 
-        if now.hour == 8 and last_1am_date != current_date:
+        if utc8_now.hour == 8 and last_1am_date != current_date:
             create_af_now_task()
             last_1am_date = current_date
 
