@@ -69,17 +69,17 @@ class AfTaskRetDAO:
                status: str | None,
                start_at,
                end_at,
-               reasib: str | None) -> int:
+               reason: str | None) -> int:
         """插入一条爬取结果记录。
 
         返回受影响行数。
         """
         sql = (
             f"INSERT INTO {cls.TABLE} "
-            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, reasib) "
+            f"(system_type, pid, fetch_date, app_id, status, start_at, end_at, reason) "
             f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
         )
-        params = (system_type, pid, fetch_date, app_id, status, start_at, end_at, reasib)
+        params = (system_type, pid, fetch_date, app_id, status, start_at, end_at, reason)
         try:
             return mysql_pool.execute(sql, params)
         except Exception as e:
