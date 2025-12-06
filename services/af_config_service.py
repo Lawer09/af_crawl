@@ -81,9 +81,9 @@ def is_prt_valid(pid:str, prt:str)->bool:
     return data
 
 
-def add_user_prt(pid:str, prt_list:list[str]):
+def add_user_prt(pid:str,username:str, password:str, prt_list:list[str]):
     """添加 prt 到 pid 授权列表"""
-    sess = get_session_by_pid(pid)
+    sess = get_session_by_user(username, password, pid)
     headers = {
         "Origin": "https://hq1.appsflyer.com",
         "Referer": "https://hq1.appsflyer.com/security-center/agency-allowlist",
@@ -152,8 +152,8 @@ def prt_auth(pid:str, prt:str):
         return prt_list
     
     prt_list.append(prt)
-    # 添加 prt
-    result = add_user_prt(pid, prt_list)
+    # 添加 prt 到 pid 授权列表
+    result = add_user_prt(pid, user["email"], user["password"], prt_list)
     try:
         AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
     except Exception as e:
