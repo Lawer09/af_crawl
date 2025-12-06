@@ -10,10 +10,10 @@ from model.af_pb_config import AfPbConfigDAO
 logger = logging.getLogger(__name__)
 
 
-def get_user_prt_list(pid:str) ->list[str]:
+def get_user_prt_list(pid:str, username:str, password:str) ->list[str]:
     """获取 pid 已授权的 prt 列表"""
 
-    sess = get_session_by_pid(pid)
+    sess = get_session_by_user(username, password, pid)
     headers = {
         "Referer": "https://hq1.appsflyer.com/security-center/agency-allowlist",
         "Accept": "application/json, text/plain, */*",
@@ -126,7 +126,8 @@ def prt_auth(pid:str, prt:str):
         raise Exception("prt is empty")
 
     # 先从数据库握手表查该 pid 关联的所有 prt 做比较
-    user_id = UserDAO.get_user_id_by_pid(pid)
+    user = UserDAO.get_user_by_pid(pid)
+    user_id = user["id"] if user and user["id"] else None
     if not user_id:
         raise Exception(f"No af_user.id found for pid {pid}")
 
@@ -135,7 +136,7 @@ def prt_auth(pid:str, prt:str):
         raise Exception(f"prt {prt} is invalid")
 
     # 获取 pid 已授权的 prt 列表
-    prt_list = get_user_prt_list(pid)
+    prt_list = get_user_prt_list(pid, user["email"], user["password"])
     if not prt_list:
         raise Exception(f"failed to get prt list for pid {pid}")
 
