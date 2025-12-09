@@ -77,6 +77,7 @@ def parse_af_csv(text: str):
         ]) or 999 # 可忽略
     # installs 优先用 'installs'，否则回退到 appsflyer 的细分列
     idx_installs = find_idx([
+        "total attributions appsflyer",
         "installs",
         "Installs appsflyer",
         "installs-ua appsflyer",
