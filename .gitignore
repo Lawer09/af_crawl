@@ -8,5 +8,5 @@
 *.out
 */*.out
 *_test.py
-
+test_*.py
 *.pid
