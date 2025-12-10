@@ -31,6 +31,7 @@ class SessionManager:
         self._sf_lock = threading.RLock()
         self._sf_events: Dict[str, threading.Event] = {}
         self._sf_timeout = int(CRAWLER.get("singleflight_timeout_seconds", 60))
+        self._login_max_try = int(CRAWLER.get("login_max_retry", 1))
 
     # ------------------ public ------------------
     def get_session(
@@ -64,7 +65,7 @@ class SessionManager:
         cookies = None
         expired_at = None
         ua = self._sanitize_user_agent(browser_context_args.get("user_agent") or PLAYWRIGHT["user_agent"]) 
-        max_attempts = 2
+        max_attempts = self._login_max_try
 
         # 单航道：同一用户名只允许一个线程执行浏览器登录
         leader, ev = self._sf_begin(f"login|{username}")
