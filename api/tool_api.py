@@ -15,7 +15,7 @@ def get_2fa_code(secret: str = Query(..., description="Google Authenticator secr
         code = get_totp_token(secret)
         return {"status": "success", "code": code}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "fail", "detail": str(e)}
     except Exception as e:
         logger.exception(f"Error generating 2FA code: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -34,7 +34,7 @@ def get_pid_2fa_code(pid: str):
         return {"status": "success", "code": code}
     except ValueError as e:
         # Business logic error (e.g., pid not found, key missing)
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "fail", "detail": str(e)}
     except Exception as e:
         logger.exception(f"Error generating 2FA code for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -55,7 +55,7 @@ def upload_qr_and_set_secret(
         result = save_2fa_secret_from_qr(pid, content)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "fail", "detail": str(e)}
     except Exception as e:
         logger.exception(f"Error processing QR for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -75,7 +75,7 @@ def set_pid_2fa_secret(
         result = save_2fa_secret(pid, secret)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "fail", "detail": str(e)}
     except Exception as e:
         logger.exception(f"Error saving secret for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
