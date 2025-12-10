@@ -5,14 +5,18 @@ from typing import Tuple
 
 import logging
 from requests import Session
-
 from core.session import session_manager
 from core.proxy import proxy_pool, ProxyPool
 from config.settings import USE_PROXY
 from model.user import UserDAO, UserProxyDAO
-from utils import get_totp_token
+from services.otp_service import (
+    get_2fa_code_by_pid as _get_2fa_code_by_pid,
+    get_2fa_code_by_username as _get_2fa_code_by_username,
+)
 
 logger = logging.getLogger(__name__)
+
+ 
 
 
 def get_session(username: str, password: str, proxies: dict | None = None, browser_context_args: dict = {}) -> Session:
@@ -101,36 +105,12 @@ def get_cookie_by_pid(pid: str) -> Dict:
 
 
 def get_2fa_code_by_pid(pid: str) -> str:
-    """根据 pid 获取 2FA 验证码"""
-    user = UserDAO.get_user_by_pid(pid)
-    if not user:
-        raise ValueError(f"User with pid={pid} not found.")
-    
-    key = user.get("2fa_key")
-    if not key or not str(key).strip():
-        raise ValueError(f"pid {pid} 未添加密钥")
-        
-    return get_totp_token(key)
+    """根据 pid 获取 2FA 验证码（代理到 otp_service）。"""
+    return _get_2fa_code_by_pid(pid)
 
 
 def get_2fa_code_by_username(username: str) -> str:
-    """根据用户名（email）获取 2FA 验证码。
+    """根据用户名（email 或 pid）获取 2FA 验证码（代理到 otp_service）。"""
+    return _get_2fa_code_by_username(username)
 
-    - 优先按 email 查询用户记录，需包含 `pid` 与 `2fa_key`
-    - 若 `2fa_key` 为空或缺失，则返回明确提示：`pid 未添加密钥`
-    """
-    user = UserDAO.get_user_by_email(username)
-    if not user:
-        # 兼容传入的 username 可能是 pid 的情况
-        user = UserDAO.get_user_by_pid(username)
-        if not user:
-            raise ValueError(f"User {username} not found.")
-
-    key = user.get("2fa_key")
-    if not key or not str(key).strip():
-        pid = user.get("pid") or ""
-        if pid:
-            raise ValueError(f"pid {pid} 未添加密钥")
-        raise ValueError("用户未添加密钥")
-
-    return get_totp_token(str(key))
+ 

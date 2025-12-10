@@ -66,6 +66,17 @@ class UserDAO:
             return None
 
     @classmethod
+    def update_2fa_key_by_pid(cls, pid: str, secret: str) -> int:
+        """更新指定 pid 的 2FA 密钥，返回受影响的行数。"""
+        try:
+            sql = f"UPDATE {cls.TABLE} SET 2fa_key = %s WHERE pid = %s"
+            affected = mysql_pool.execute(sql, (secret, pid))
+            return int(affected or 0)
+        except Exception as e:
+            logger.error(f"Error updating 2fa_key for pid={pid}: {e}")
+            return 0
+
+    @classmethod
     def save_user(cls, email: str, password: str, account_type: str):
         sql = f"""
         INSERT INTO {cls.TABLE} (email, password, account_type, enable)

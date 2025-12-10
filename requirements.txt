@@ -9,3 +9,6 @@ python-multipart
 psutil
 aiohttp
 redis
+qreader
+Pillow
+numpy
