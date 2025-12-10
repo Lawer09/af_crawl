@@ -512,8 +512,14 @@ class SessionManager:
             # 再次通过 whoami 确认登录状态
             whoami_json2, need_otp2 = whoami_check(s, w_headers, timeout=30)
             if need_otp2 or not whoami_json2 or not whoami_json2.get("email"):
-                logger.warning("whoami after OTP 未返回有效 JSON，继续后续流程但可能缺少部分会话信息")
+                logger.error("whoami after OTP 未确认登录，拒绝保存 Cookie -> %s", username)
+                raise ValueError("登录未确认，whoami 校验失败")
         
+        # 额外的令牌校验：必须至少包含 af_jwt 或 auth_tkt 才视为登录成功
+        if ("af_jwt" not in s.cookies) and ("auth_tkt" not in s.cookies):
+            logger.error("登录未生成有效令牌（af_jwt/auth_tkt），拒绝保存 -> %s", username)
+            raise ValueError("登录未生成有效令牌")
+
         for name in ["af_jwt", "auth_tkt"]:
             if name in s.cookies:
                 final_cookies.append({
