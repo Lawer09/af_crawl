@@ -22,6 +22,7 @@ def get_2fa_code(secret: str = Query(..., description="Google Authenticator secr
 
 from services.otp_service import get_2fa_code_by_pid
 from services.otp_service import save_2fa_secret_from_qr
+from services.otp_service import save_2fa_secret
 
 @router.get("/2fa/pid/{pid}")
 def get_pid_2fa_code(pid: str):
@@ -57,4 +58,24 @@ def upload_qr_and_set_secret(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception(f"Error processing QR for pid {pid}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/2fa/secret")
+def set_pid_2fa_secret(
+    pid: str = Form(..., description="用户 PID"),
+    secret: str = Form(..., description="2FA 密钥或 otpauth 文本")
+):
+    """根据 pid 和密钥参数直接保存密钥。
+
+    返回：{"status": "success", "pid": pid, "secret": secret}
+    错误：400 - 业务错误（如 PID 不存在、secret 为空、格式不正确、写入失败）
+    """
+    try:
+        result = save_2fa_secret(pid, secret)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error saving secret for pid {pid}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

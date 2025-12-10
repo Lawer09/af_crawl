@@ -161,3 +161,37 @@ def save_2fa_secret_from_qr(pid: str, image_bytes: bytes) -> dict:
         raise ValueError("写入密钥失败，请稍后重试")
     logger.info("Updated 2FA secret for pid=%s", pid)
     return {"status": "success", "pid": pid, "secret": secret}
+
+
+def save_2fa_secret(pid: str, secret_or_otpauth: str) -> dict:
+    """根据 pid 和密钥参数直接保存密钥。
+
+    - `secret_or_otpauth` 可为纯 `secret` 或完整 `otpauth://...` 文本
+    - 成功返回：{"status": "success", "pid": pid, "secret": secret}
+    - 失败抛 ValueError，detail 文案与 QR 接口保持一致
+    """
+    if not pid or not pid.strip():
+        raise ValueError("pid 不能为空")
+    user = UserDAO.get_user_by_pid(pid)
+    if not user:
+        raise ValueError(f"pid {pid} 不存在")
+
+    if not secret_or_otpauth or not str(secret_or_otpauth).strip():
+        raise ValueError("secret 不能为空")
+
+    secret = str(secret_or_otpauth).strip()
+    # 如果传入的是 otpauth 文本，解析 secret
+    if "otpauth://" in secret:
+        parsed = _parse_otpauth_secret(secret)
+        if not parsed:
+            raise ValueError("不是二维码信息或格式不正确（未找到 secret 参数）")
+        secret = parsed.strip()
+
+    if not secret:
+        raise ValueError("secret 不能为空")
+
+    affected = UserDAO.update_2fa_key_by_pid(pid, secret)
+    if affected <= 0:
+        raise ValueError("写入密钥失败，请稍后重试")
+    logger.info("Saved 2FA secret directly for pid=%s", pid)
+    return {"status": "success", "pid": pid, "secret": secret}
