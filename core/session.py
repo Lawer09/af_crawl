@@ -10,6 +10,7 @@ import threading
 from model.cookie import cookie_model
 from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES, CRAWLER, USE_PROXY
 from services.otp_service import get_2fa_code_by_username
+from services.auth_service import whoami_check
 
 logger = logging.getLogger(__name__)
 
@@ -458,33 +459,31 @@ class SessionManager:
         payload = {"username": username, "password": password, "keep-user-logged-in": False}
         r = s.post(cfg.LOGIN_API, json=payload, headers=headers, timeout=30)
         r.raise_for_status()
+        # 登录接口可能返回 200 但 JSON 表示失败（如用户名或密码错误）
+        try:
+            login_json = r.json()
+            if isinstance(login_json, dict):
+                # 标准失败返回：{"Message":"Invalid username or password.","NextUrl":"","LoginSuccess":false,"StatusCode":0}
+                if login_json.get("LoginSuccess") is False or login_json.get("StatusCode") == 0:
+                    msg = login_json.get("Message") or "Invalid username or password."
+                    logger.error("Login failed for %s: %s", username, msg)
+                    raise ValueError(msg)
+        except ValueError:
+            # 向上抛出具体的失败信息
+            raise
+        except Exception:
+            # 非 JSON 或解析失败，继续通过 whoami 判断登录状态
+            pass
 
         # 正常登录可能没有任何返回值；通过 whoami 判断是否已登录
-        whoami_url = "https://hq1.appsflyer.com/cdp/whoami"
         w_headers = {**headers, "Accept": "application/json, text/plain, */*"}
-        w = s.get(whoami_url, headers=w_headers, timeout=30)
-        whoami_text = w.text or ""
-        logger.info("whoami status=%s", w.status_code)
-
-        need_otp = False
-        whoami_json = None
-        if "DOCTYPE html" in whoami_text or "<html" in whoami_text.lower():
-            # 返回 HTML 说明尚未通过登录，需要进入验证码阶段
-            need_otp = True
-        else:
-            try:
-                whoami_json = w.json()
-                # 如果不是字典或没有 email 字段，视为未登录
-                if not isinstance(whoami_json, dict) or not whoami_json.get("email"):
-                    need_otp = True
-            except Exception:
-                need_otp = True
+        whoami_json, need_otp = whoami_check(s, w_headers, timeout=30)
 
         if need_otp:
             logger.info("whoami 未确认登录，进入 2FA 验证阶段 -> %s", username)
             # 通过服务层（支持 email 或 pid）获取 2FA 验证码
             otp_code = get_2fa_code_by_username(username)
-            logger.info("Performing 2FA check for %s", username)
+            logger.info("Performing 2FA check for %s and code is %s", username, otp_code)
 
             # 显式设置 Cookie 头，确保包含登录返回的 cookie
             cookie_dict = requests.utils.dict_from_cookiejar(s.cookies)
@@ -511,45 +510,9 @@ class SessionManager:
             logger.info("2FA verification successful for %s", username)
 
             # 再次通过 whoami 确认登录状态
-            w2 = s.get(whoami_url, headers=w_headers, timeout=30)
-            logger.info("whoami after OTP status=%s", w2.status_code)
-            try:
-                whoami_json = w2.json()
-            except Exception:
-                whoami_json = None
-            if not whoami_json or not whoami_json.get("email"):
+            whoami_json2, need_otp2 = whoami_check(s, w_headers, timeout=30)
+            if need_otp2 or not whoami_json2 or not whoami_json2.get("email"):
                 logger.warning("whoami after OTP 未返回有效 JSON，继续后续流程但可能缺少部分会话信息")
-        
-        if need_otp:
-            logger.info("Login 200 but 2FA required for %s", username)
-
-            # 通过服务层获取 2FA 验证码（支持 email 或 pid）
-            otp_code = get_2fa_code_by_username(username)
-            logger.info("Performing 2FA check for %s", username)
-
-            # 显式设置 Cookie 头，确保包含登录返回的 cookie
-            cookie_dict = requests.utils.dict_from_cookiejar(s.cookies)
-            s.headers["Cookie"] = "; ".join([f"{k}={v}" for k, v in cookie_dict.items()])
-            s.headers.update({
-                "Referer": "https://hq1.appsflyer.com/auth/login",
-                "Content-Type": "application/json;charset=UTF-8",
-            })
-
-            otp_url = "https://hq1.appsflyer.com/auth/check-otp/"
-            otp_payload = {"otp-input": str(otp_code)}
-            r_otp = s.post(otp_url, json=otp_payload, timeout=30)
-            logger.info("2FA response for %s: status=%s, body=%s", username, r_otp.status_code, r_otp.text[:200])
-            r_otp.raise_for_status()
-
-            try:
-                otp_resp = r_otp.json()
-            except Exception:
-                otp_resp = {}
-            if otp_resp.get("LoginSuccess") is not True:
-                logger.error("2FA verification failed for %s: %s", username, r_otp.text[:200])
-                raise ValueError("2FA 验证失败")
-            logger.info("2FA verification successful for %s", username)
-
         
         for name in ["af_jwt", "auth_tkt"]:
             if name in s.cookies:
