@@ -23,7 +23,10 @@ class UserDAO:
     def get_user_by_email(cls, email: str) -> Optional[Dict]:
 
         try:
-            rows = mysql_pool.select(f"SELECT email, password, account_type FROM {cls.TABLE} WHERE email = %s", (email,))
+            rows = mysql_pool.select(
+                f"SELECT pid, email, password, account_type, 2fa_key FROM {cls.TABLE} WHERE email = %s",
+                (email,)
+            )
 
             if rows:
                 return rows[0]
@@ -37,7 +40,7 @@ class UserDAO:
         """根据 pid 查询用户（当 pid='pid'）"""
         try:
             rows = mysql_pool.select(
-                f"SELECT id, email, password, account_type FROM {cls.TABLE} WHERE pid = %s",
+                f"SELECT id, email, password, account_type, 2fa_key FROM {cls.TABLE} WHERE pid = %s",
                 (pid,)
             )
             if rows:
