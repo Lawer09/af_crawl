@@ -158,7 +158,7 @@ def save_2fa_secret_from_qr(pid: str, image_bytes: bytes) -> dict:
     # 入库
     affected = UserDAO.update_2fa_key_by_pid(pid, secret)
     if affected <= 0:
-        raise ValueError("写入密钥失败，请稍后重试")
+        raise ValueError("写入密钥失败，pid不存在或密钥相同，请稍后重试")
     logger.info("Updated 2FA secret for pid=%s", pid)
     return {"status": "success", "pid": pid, "secret": secret}
 
@@ -192,6 +192,6 @@ def save_2fa_secret(pid: str, secret_or_otpauth: str) -> dict:
 
     affected = UserDAO.update_2fa_key_by_pid(pid, secret)
     if affected <= 0:
-        raise ValueError("写入密钥失败，请稍后重试")
+        raise ValueError("写入密钥失败，pid不存在或密钥相同，请稍后重试")
     logger.info("Saved 2FA secret directly for pid=%s", pid)
     return {"status": "success", "pid": pid, "secret": secret}
