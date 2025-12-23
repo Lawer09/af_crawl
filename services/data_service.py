@@ -270,23 +270,27 @@ def save_data_bulk(pid:str, date:str, rows: List[Dict]):
     logger.info(f"save_data_bulk start pid={pid} date={date} rows={len(rows)}")
     af_rows = []
     for row in rows:
-            row['pid'] = pid
-            af_row = row.copy()
-            af_row['date'] = date
-            af_rows.append(af_row)
+        row['pid'] = pid
+        af_row = row.copy()
+        af_row['date'] = date
+        af_rows.append(af_row)
     t_user = time.perf_counter()
     UserAppDataDAO.save_data_bulk(rows)
     user_elapsed = time.perf_counter() - t_user
     logger.info(f"UserAppDataDAO.save_data_bulk done in {user_elapsed:.2f}s size={len(rows)}")
     
-    if SYSTEM_TYPE == "XIAN":
-        # 目前西安数据库不知道为什么 af_data表插入会出现限制，先不处理
-        return
+    # if SYSTEM_TYPE == "XIAN":
+    #     # 目前西安数据库不知道为什么 af_data表插入会出现限制，先不处理
+    #     return
 
-    t_af = time.perf_counter()
-    AfAppDataDAO.upsert_bulk(af_rows)
-    af_elapsed = time.perf_counter() - t_af
-    logger.info(f"AfAppDataDAO.upsert_bulk done in {af_elapsed:.2f}s size={len(af_rows)}")
+    try:
+        t_af = time.perf_counter()
+        AfAppDataDAO.upsert_bulk(af_rows)
+        af_elapsed = time.perf_counter() - t_af
+        logger.info(f"AfAppDataDAO.upsert_bulk done in {af_elapsed:.2f}s size={len(af_rows)}")
+    except Exception as e:
+        logger.error(f"Failed to upsert_bulk data for pid={pid} date={date}: {str(e)}")
+        raise
   
 
 def fetch_and_save_data(pid: str, app_id: str, aff_id: str, date: str) -> List[Dict]:
