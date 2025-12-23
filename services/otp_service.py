@@ -6,6 +6,7 @@ import threading
 from urllib.parse import urlparse, parse_qs
 
 from model.user import UserDAO
+from model.google_auth import GoogleAuthDAO
 from utils import get_totp_token
 
 logger = logging.getLogger(__name__)
@@ -195,3 +196,44 @@ def save_2fa_secret(pid: str, secret_or_otpauth: str) -> dict:
         raise ValueError("写入密钥失败，pid不存在或密钥相同，请稍后重试")
     logger.info("Saved 2FA secret directly for pid=%s", pid)
     return {"status": "success", "pid": pid, "secret": secret}
+
+
+def get_2fa_code_by_account(account: str) -> str:
+    """根据 account 获取 google_auth 的 2FA 验证码"""
+    record = GoogleAuthDAO.get_by_account(account)
+    if not record:
+        raise ValueError(f"Account {account} not found in google_auth.")
+
+    key = record.get("key")
+    if not key or not str(key).strip():
+        raise ValueError(f"Account {account} has no 2FA key.")
+
+    return get_totp_token(str(key))
+
+
+def save_google_auth_secret(account: str, secret_or_otpauth: str, note: str = None, userid: int = None) -> dict:
+    """保存 google_auth 密钥"""
+    if not account or not account.strip():
+        raise ValueError("account 不能为空")
+
+    if not secret_or_otpauth or not str(secret_or_otpauth).strip():
+        raise ValueError("secret 不能为空")
+
+    secret = str(secret_or_otpauth).strip()
+    if "otpauth://" in secret:
+        parsed = _parse_otpauth_secret(secret)
+        if not parsed:
+            raise ValueError("不是二维码信息或格式不正确（未找到 secret 参数）")
+        secret = parsed.strip()
+
+    if not secret:
+        raise ValueError("secret 不能为空")
+
+    # Pass userid as both created_by and own, but only for new records (handled by DAO)
+    GoogleAuthDAO.save_auth(account, secret, note, created_by=userid, own=userid)
+    logger.info("Saved google_auth secret for account=%s", account)
+    return {"status": "success", "account": account, "secret": secret}
+
+def get_google_auth_by_own(own: int) -> list[dict]:
+    """根据 own 获取 google_auth 列表 (不包含 key)"""
+    return GoogleAuthDAO.get_by_own(own)

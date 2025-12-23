@@ -23,6 +23,9 @@ def get_2fa_code(secret: str = Query(..., description="Google Authenticator secr
 from services.otp_service import get_2fa_code_by_pid
 from services.otp_service import save_2fa_secret_from_qr
 from services.otp_service import save_2fa_secret
+from services.otp_service import get_2fa_code_by_account
+from services.otp_service import save_google_auth_secret
+from services.otp_service import get_google_auth_by_own
 
 @router.get("/2fa/pid/{pid}")
 def get_pid_2fa_code(pid: str):
@@ -78,4 +81,54 @@ def set_pid_2fa_secret(
         return {"status": "fail", "detail": str(e)}
     except Exception as e:
         logger.exception(f"Error saving secret for pid {pid}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/2fa/account/{account}")
+def get_account_2fa_code(account: str):
+    """
+    Get 2FA code for a specific account (google_auth table).
+    """
+    try:
+        code = get_2fa_code_by_account(account)
+        return {"status": "success", "code": code}
+    except ValueError as e:
+        return {"status": "fail", "detail": str(e)}
+    except Exception as e:
+        logger.exception(f"Error generating 2FA code for account {account}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/2fa/account/secret")
+def set_account_2fa_secret(
+    account: str = Form(..., description="Account Name"),
+    secret: str = Form(..., description="2FA 密钥或 otpauth 文本"),
+    note: str = Form(None, description="Note"),
+    userid: int = Form(None, description="User ID (own/created_by) for new records")
+):
+    """根据 account 和密钥参数保存密钥 (google_auth 表)。
+
+    返回：{"status": "success", "account": account, "secret": secret}
+    错误：400 - 业务错误
+    """
+    try:
+        result = save_google_auth_secret(account, secret, note, userid)
+        return result
+    except ValueError as e:
+        return {"status": "fail", "detail": str(e)}
+    except Exception as e:
+        logger.exception(f"Error saving secret for account {account}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/2fa/list")
+def list_google_auth_by_own(own: int = Query(..., description="Owner ID")):
+    """
+    Get google_auth list by own, without key.
+    """
+    try:
+        data = get_google_auth_by_own(own)
+        return {"status": "success", "data": data}
+    except Exception as e:
+        logger.exception(f"Error fetching google_auth for own={own}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
