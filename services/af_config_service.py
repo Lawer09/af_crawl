@@ -1,4 +1,5 @@
 # af 相关的验证
+import json
 from services.login_service import get_session_by_pid, get_session_by_user
 from model.user import UserDAO
 from model.af_handshake import AfHandshakeDAO
@@ -294,4 +295,48 @@ def set_pb_config(username:str, password:str, pid:str):
         AfPbConfigDAO.mark_config_active_by_id(cfg_id, status=1)
     except Exception as e:
         logger.warning("Mark config active failed: id=%s, pid=%s, err=%s", cfg_id, pid, e)
+        raise
+
+
+def replace_adv_privacy(username:str = None, password:str = None, pid:str = None):
+    """替换广告隐私中的部分参数"""
+    if pid is None and username is not None:
+        user = UserDAO.get_user_by_email(username)
+        if user is None or user["pid"] is None:
+            raise ValueError(f"User or User Pid not found for email: {username}")
+        pid = user["pid"]
+
+    if pid is not None and (username is None or password is None):
+        user = UserDAO.get_user_by_pid(pid)
+        if user is None or user["email"] is None or user["password"] is None:
+            raise ValueError(f"User or User Credentials not found for pid: {pid}")
+        username = user["email"]
+        password = user["password"]
+
+    if pid is None or username is None or password is None:
+        raise ValueError("pid, username, password are required")
+    
+    # 获取已配置的信息
+    try:
+        URL = f"https://hq1.appsflyer.com/partners/postbacks/{pid}/ap"
+        HEADERS = {
+            "Referer": URL
+        }
+        logger.info("GET adv privacy url:%s, headers:%s pid:%s", URL, HEADERS, pid)
+        sess = get_session_by_user(username, password, pid)
+        resp = request_with_retry(sess, "GET", URL, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        resp_json = resp.json()
+        inappevent_val = json.loads(resp_json["inappevent"]["value"])
+        install_val = json.loads(resp_json["install"]["value"])
+        a = [
+            {"function_type":"sdk","function_name":"af_siteid","arg":""},
+            "&_c_=",
+            {"function_type":"sdk","function_name":"af_sub_siteid","arg":""},
+            "&subid=",{"function_type":"sdk","function_name":"af_c_id","arg":""},
+            "&geo=",{"function_type":"sdk","function_name":"country-code","arg":""},"&_u_=",{"function_type":"sdk","function_name":"af_ad_id","arg":""},"&subid3=",{"function_type":"sdk","function_name":"c","arg":""},"&_c_=",{"function_type":"sdk","function_name":"af_adset_id","arg":""},"&eventtime=",{"function_type":"sdk","function_name":"install-ts-hour-floor","arg":""},"&clicktime=",{"function_type":"sdk","function_name":"click-ts-hour-floor","arg":""},"&_c_=",{"function_type":"sdk","function_name":"af_ad","arg":""},"&subid7=",{"function_type":"sdk","function_name":"blocked-reason","arg":""},"&subid8=",{"function_type":"sdk","function_name":"blocked-reason-value","arg":""},"&subid9=",{"function_type":"sdk","function_name":"blocked-sub-reason","arg":""},"&Is-first-event=",{"function_type":"sdk","function_name":"is-first","arg":""},"&Is_primary_attribution=",{"function_type":"sdk","function_name":"is-primary","arg":""},"&Is-reattribution=",{"function_type":"sdk","function_name":"is-reattr","arg":""},"&Is-reengagement=",{"function_type":"sdk","function_name":"is-reengage","arg":""},"&Is-rejected=",{"function_type":"sdk","function_name":"is-rejected","arg":""},"&Is-retargeting=",{"function_type":"sdk","function_name":"is-retarget","arg":""},"&Is-s2s=",{"function_type":"sdk","function_name":"is-s2s-0-or-1","arg":""},"&postbackid=",{"function_type":"sdk","function_name":"random-str","arg":""},"&eventid=",{"function_type":"sdk","function_name":"mapped-iae","arg":""}]
+        logger.info("获取已配置的广告隐私返回结果 result:%s", (resp_json or "")[:300])
+
+    except Exception as e:
+        logger.warning("GET adv privacy failed for %s -> %s", pid, e)
         raise
