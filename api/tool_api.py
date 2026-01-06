@@ -23,7 +23,7 @@ def get_2fa_code(secret: str = Query(..., description="Google Authenticator secr
 from services.otp_service import get_2fa_code_by_pid
 from services.otp_service import save_2fa_secret_from_qr
 from services.otp_service import save_2fa_secret
-from services.otp_service import get_2fa_code_by_account
+from services.otp_service import get_2fa_code_by_account, get_2fa_code_by_bid
 from services.otp_service import save_google_auth_secret
 from services.otp_service import get_google_auth_by_own
 
@@ -98,6 +98,20 @@ def get_account_2fa_code(account: str):
         logger.exception(f"Error generating 2FA code for account {account}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
+@router.get("/2fa/bid/{bid}")
+def get_bid_2fa_code(bid: int):
+    """
+    Get 2FA code for a specific bid (google_auth table).
+    """
+    try:
+        code, account = get_2fa_code_by_bid(bid)
+        return {"status": "success", "code":code, "account": account}
+    except ValueError as e:
+        return {"status": "fail", "detail": str(e)}
+    except Exception as e:
+        logger.exception(f"Error generating 2FA code for bid {bid}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/2fa/account/secret")
 def set_account_2fa_secret(
