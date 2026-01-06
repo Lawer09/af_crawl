@@ -83,7 +83,7 @@ def _parse_args():
     sub.add_parser("create_tasks", help="创建应用数据任务")
 
     sub.add_parser("init_data", help="创建应用数据任务")
-
+    sub.add_parser("sched", help="启动定时任务")
     return parser.parse_args()
 
 
