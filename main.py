@@ -172,6 +172,11 @@ if __name__ == "__main__":
         logger.info("=== create_tasks start ===")
         task_service.create_af_now_task()
     
+    elif args.command == "sched":
+        from schedulers.af_jobs import run_jobs
+        logger.info("=== run_jobs start ===")
+        run_jobs()
+
     elif args.command == "init_data":
         from scripts import system_init
 

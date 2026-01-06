@@ -12,3 +12,4 @@ redis
 qreader
 Pillow
 numpy
+schedule

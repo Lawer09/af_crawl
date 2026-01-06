@@ -1,5 +1,6 @@
 # af 相关的验证
 import json
+from model import af_onelink_template
 from services.login_service import get_session_by_pid, get_session_by_user
 from model.user import PidConfigDAO, UserDAO
 from model.af_handshake import AfHandshakeDAO
@@ -160,6 +161,47 @@ def prt_auth(pid:str, prt:str):
     except Exception as e:
         logger.warning("Handshake sync failed: pid=%s prt=%s -> %s", pid, prt, e)
     return result
+
+
+def get_onlink_templates(username:str, password:str, app_id:str, pid:str):
+    url = f"https://hq1.appsflyer.com/attribution/data/{app_id}/{pid}"
+    
+    sess = get_session_by_user(username, password, pid)
+    headers = {
+        "Referer": url,
+        "Accept": "application/json",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+    try:
+        resp = request_with_retry(sess, "GET", url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        try:
+            data = resp.json()
+            logger.log("get_onlink_templates resp: %s", data)
+            if "ok" in data and data["ok"]:
+                templates = data["data"]["oneLink"]["templates"]
+                for template in templates:
+                    template["app_id"] = app_id
+                    template["pid"] = pid
+                    template["baseUrl"] += "?" 
+                return templates
+            return None
+        except ValueError as e:
+            # 非 JSON 或空响应时，记录细节并返回空列表，避免调度失败
+            ct = resp.headers.get("Content-Type")
+            logger.error(
+                "Failed to parse JSON response for pid %s  from %s: %s. status=%s, content-type=%s, body=%s",
+                pid,
+                url,
+                e,
+                resp.status_code,
+                ct,
+                (resp.text or "")[:100],
+            )
+            raise Exception("get fail")
+    except Exception as e:
+        logger.warning("get_af_onlink_templates request failed for %s -> %s; skip", pid, e)
+        raise Exception(f"failed for {pid} -> {e}")
 
 
 def set_pb_config(username:str, password:str, pid:str):
