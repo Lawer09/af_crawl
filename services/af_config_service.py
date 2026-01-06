@@ -1,6 +1,5 @@
 # af 相关的验证
 import json
-from turtle import pd
 from services.login_service import get_session_by_pid, get_session_by_user
 from model.user import PidConfigDAO, UserDAO
 from model.af_handshake import AfHandshakeDAO
