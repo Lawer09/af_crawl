@@ -210,6 +210,17 @@ def get_2fa_code_by_account(account: str) -> str:
 
     return get_totp_token(str(key))
 
+def get_2fa_code_by_bid(bid: int) -> str:
+    """根据 bid 获取 google_auth 的 2FA 验证码"""
+    record = GoogleAuthDAO.get_by_bid(bid)
+    if not record:
+        raise ValueError(f"Bid {bid} not found in google_auth.")
+
+    key = record.get("key")
+    if not key or not str(key).strip():
+        raise ValueError(f"Bid {bid} has no 2FA key.")
+
+    return get_totp_token(str(key)), record.get("account")
 
 def save_google_auth_secret(account: str, secret_or_otpauth: str, note: str = None, userid: int = None) -> dict:
     """保存 google_auth 密钥"""

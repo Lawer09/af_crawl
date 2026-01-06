@@ -31,6 +31,22 @@ class GoogleAuthDAO:
             return None
 
     @classmethod
+    def get_by_bid(cls, bid: int) -> Optional[Dict]:
+        """根据 bid 查询"""
+        try:
+            # key 是关键字，需要用反引号
+            rows = mysql_pool.select(
+                f"SELECT id, account, `key`, note, created_at, updated_at FROM {cls.TABLE} WHERE bid = %s LIMIT 1",
+                (bid,)
+            )
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching google_auth by account: {e}")
+            return None
+
+    @classmethod
     def get_by_own(cls, own: int) -> List[Dict]:
         """根据 own 查询，返回不包含 key 的列表"""
         try:

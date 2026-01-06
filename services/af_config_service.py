@@ -1,6 +1,8 @@
 # af 相关的验证
+import json
+from turtle import pd
 from services.login_service import get_session_by_pid, get_session_by_user
-from model.user import UserDAO
+from model.user import PidConfigDAO, UserDAO
 from model.af_handshake import AfHandshakeDAO
 import config.af_config as cfg
 from utils.retry import request_with_retry
@@ -158,7 +160,6 @@ def prt_auth(pid:str, prt:str):
         AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
     except Exception as e:
         logger.warning("Handshake sync failed: pid=%s prt=%s -> %s", pid, prt, e)
-        raise Exception(f"failed for {pid} -> {e}")
     return result
 
 
@@ -294,4 +295,89 @@ def set_pb_config(username:str, password:str, pid:str):
         AfPbConfigDAO.mark_config_active_by_id(cfg_id, status=1)
     except Exception as e:
         logger.warning("Mark config active failed: id=%s, pid=%s, err=%s", cfg_id, pid, e)
+        raise
+
+
+def set_adv_privacy(username:str = None, password:str = None, pid:str = None, append_note:str = ''):
+    """设置广告隐私中的部分参数"""
+    note = ''
+    config_note = ''
+    if pid is None and username is not None:
+        user = UserDAO.get_user_by_email(username)
+        pid_config = PidConfigDAO.get_by_email(pid)
+        if user is None or user["pid"] is None or pid_config is None:
+            raise ValueError(f"User or User Pid not found for email: {username}")
+        if user:
+            pid = user["pid"]
+            username = user["email"]
+            password = user["password"]
+            note = user["note"]
+        if pid_config:
+            pid = pid_config["pid"]
+            config_note = pid_config["note"]
+            username = pid_config["email"]
+            password = pid_config["password"]
+
+    if pid is not None and (username is None or password is None):
+        user = UserDAO.get_user_by_pid(pid)
+        pid_config = PidConfigDAO.get_by_pid(pid)
+        if user is None or user["email"] is None or user["password"] is None or pid_config is None:
+            raise ValueError(f"User or User Credentials not found for pid: {pid}")
+        if user:
+            note = user["note"]
+            username = user["email"]
+            password = user["password"]
+        if pid_config:
+            config_note = pid_config["note"]
+            username = pid_config["email"]
+            password = pid_config["password"]
+
+    if pid is None or username is None or password is None:
+        raise ValueError("pid, username, password are required")
+    
+    # 获取已配置的信息
+    try:
+        URL = f"https://hq1.appsflyer.com/partners/postbacks/{pid}/ap"
+        HEADERS = {
+            "Referer": URL
+        }
+        logger.info("GET adv privacy url:%s, headers:%s pid:%s", URL, HEADERS, pid)
+        sess = get_session_by_user(username, password, pid)
+        resp = request_with_retry(sess, "GET", URL, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        resp_json = resp.json()
+
+        if resp_json["inappevent"]["value"] == '':
+            logger.warning("inappevent value is empty for %s", pid)
+            return
+
+        inappevent_val = json.loads(resp_json["inappevent"]["value"])
+        install_val = json.loads(resp_json["install"]["value"])
+
+        logger.info("GET adv privacy data success")
+
+        append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)"
+        inappevent_val= inappevent_val[0] + append_arg
+        install_val = install_val[0] + append_arg
+        new_data = {
+            "install": {
+                "isActive":True,
+                "value" : install_val
+            },
+            "inappevent": {
+                "isActive":True,
+                "value" : inappevent_val
+            }
+        }
+        resp = request_with_retry(sess, "PUT", URL, json=new_data, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        logger.info("SET adv privacy data success")
+
+        PidConfigDAO.update_note_by_pid(pid, config_note or '' + append_note)
+        UserDAO.update_note_by_pid(pid, note or '' + append_note)
+
+    except Exception as e:
+        logger.warning("SET adv privacy failed for %s -> %s", pid, e)
+        PidConfigDAO.update_note_by_pid(pid, config_note or '' + "|刷新失败")
+        UserDAO.update_note_by_pid(pid, note or '' + "|刷新失败")
         raise
