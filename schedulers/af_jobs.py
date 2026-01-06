@@ -10,7 +10,7 @@ from services.fs_service import send_feishu_text
 
 logger = logging.getLogger(__name__)
 
-FS_WEBHOOK = ""
+FS_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/067033b4-ac8d-4f41-85ec-4852df148932"
 
 def remove_duplicate_by_field(arr1, arr2, field):
     """
