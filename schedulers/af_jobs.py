@@ -10,7 +10,8 @@ from services.fs_service import send_feishu_text
 
 logger = logging.getLogger(__name__)
 
-FS_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/067033b4-ac8d-4f41-85ec-4852df148932"
+FS_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/ea65fafd-8add-44d6-a652-bc56b55493a5"
+FS_LOG_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/067033b4-ac8d-4f41-85ec-4852df148932"
 
 def remove_duplicate_by_field(arr1, arr2, field):
     """
@@ -20,6 +21,7 @@ def remove_duplicate_by_field(arr1, arr2, field):
     :param field: 指定的字段名（如 'id'、'name'）
     :return: 剔除后的arr2
     """
+    logger.info
     # 提取arr1中指定字段的所有值，存入集合（O(1)查询）
     arr1_field_values = {item[field] for item in arr1 if field in item}
     # 筛选arr2中指定字段值不在arr1中的元素
@@ -47,36 +49,47 @@ def remove_duplicate_bidirectional(arr1, arr2, field):
     
     return filtered_arr1, filtered_arr2
 
-def build_onlink_templates_change_notify(old_templates: dict, new_templates: dict) -> str:
+def build_onlink_templates_change_notify(removed_templates: list, added_templates: list) -> str:
     """构建onelink模板变化通知。"""
-    old_templates_str = [f"{template['label']} {template['base_url']} \n" for template in old_templates]    
-    new_templates_str = [f"{template['label']} {template['base_url']} \n" for template in new_templates]
-    return f"旧模板:\n{old_templates_str}\n新模板:\n{new_templates_str}"
-
+    # 生成器版本（无需创建中间列表，内存更优）
+    removed_templates_str = "".join(f"{template['label']} {template['base_url']} \n" for template in removed_templates)
+    added_templates_str = "".join(f"{template['label']} {template['base_url']} \n" for template in added_templates)
+    return f"删除模板:\n{removed_templates_str}\n新增模板:\n{added_templates_str}"
 
 def crawl_users_onelink_templates_job() -> None:
     """定时任务：每天更新onelink模板信息。"""
+    send_feishu_text(FS_LOG_WEBHOOK, "开始检测onelink模板信息")
     crawl_users = AfCrawlUserDAO.get_all()
     if crawl_users:
         for user in crawl_users:
-            templates = get_onlink_templates(user["username"], user["password"], user["app_id"], user["pid"])
+            templates, selected = get_onlink_templates(user["email"], user["password"], user["app_id"], user["pid"])
             if templates:
                 try:
                     existing_templates = AfOnelinkTemplateDAO.get_templates(user["pid"], user["app_id"])
                     if existing_templates:
-                        existing_templates, templates = remove_duplicate_bidirectional(existing_templates, templates, "base_url")
-                        AfOnelinkTemplateDAO.delete(user["pid"], user["app_id"])
-                        change_notify = build_onlink_templates_change_notify(existing_templates, templates)
-                        send_feishu_text(FS_WEBHOOK, f"pid {user['pid']} {user['username']} 的onelink模板发生变化\n {change_notify}")
+                        diff_templates = remove_duplicate_by_field(existing_templates, templates, "base_url")
+                        diff_exist = remove_duplicate_by_field(templates, existing_templates, "base_url")
+                        if diff_exist or diff_templates:
+                            AfOnelinkTemplateDAO.delete(user["pid"], user["app_id"])
+                            change_notify = build_onlink_templates_change_notify(diff_exist, diff_templates)
+                            logger.info(f"{user['email']}  {user['app_id']}  {diff_exist} {diff_templates}")
+                            send_feishu_text(FS_WEBHOOK, f"{user['email']}  {user['app_id']} \nonelink模板url更新，更新部分如下\n{change_notify}")
+                            send_feishu_text(FS_LOG_WEBHOOK, f"{user['email']}  {user['app_id']}\nonelink模板url更新，更新部分如下\n{change_notify}")
+                    else:
+                        change_notify = build_onlink_templates_change_notify([], templates)
+                        send_feishu_text(FS_WEBHOOK, f"{user['email']}  {user['app_id']}\nonelink模板url更新，更新部分如下\n{change_notify}")
+                        send_feishu_text(FS_LOG_WEBHOOK, f"{user['email']}  {user['app_id']}\nonelink模板url更新，更新部分如下\n{change_notify}")
                     AfOnelinkTemplateDAO.save_all(templates)
                 except Exception as e:
-                    logger.error(f"Failed to save onelink templates for user {user['username']}: {e}")
+                    logger.error(f"Failed to save onelink templates for user {user['email']}: {e}")
             else:
-                logger.error(f"Failed to get onelink templates for user {user['username']}")
+                logger.error(f"Failed to get onelink templates for user {user['email']}")
     else:
         logger.info("No crawl users found.")
+    time.sleep(5)
+    send_feishu_text(FS_LOG_WEBHOOK, "完成检测onelink模板信息")
 
-schedule.every().day.at("01:00").do(crawl_users_onelink_templates_job)
+schedule.every(6).hours.do(crawl_users_onelink_templates_job)
 
 def run_jobs() -> None:
     """运行定时任务。"""

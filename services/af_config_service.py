@@ -177,15 +177,18 @@ def get_onlink_templates(username:str, password:str, app_id:str, pid:str):
         resp.raise_for_status()
         try:
             data = resp.json()
-            logger.log("get_onlink_templates resp: %s", data)
+            
             if "ok" in data and data["ok"]:
                 templates = data["data"]["oneLink"]["templates"]
                 for template in templates:
                     template["app_id"] = app_id
                     template["pid"] = pid
                     template["baseUrl"] += "?" 
-                return templates
-            return None
+                    template["base_url"] = template["baseUrl"]
+                return templates, data["data"]["oneLink"]["selectedTemplate"]
+            else:
+                logger.info(f"get_onlink_templates {pid} {app_id} fail: {data}")
+            return None, None
         except ValueError as e:
             # 非 JSON 或空响应时，记录细节并返回空列表，避免调度失败
             ct = resp.headers.get("Content-Type")

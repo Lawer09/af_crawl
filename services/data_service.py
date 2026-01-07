@@ -183,9 +183,7 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         row["start_date"] = start_date
         row["end_date"] = end_date
         row["days"] = days_cnt
-
     return rows
-
 
 def fetch_csv_by_pid(pid:str, app_id:str, date:str):
     try:
