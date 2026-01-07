@@ -84,6 +84,7 @@ def _parse_args():
 
     sub.add_parser("init_data", help="创建应用数据任务")
     sub.add_parser("sched", help="启动定时任务")
+    sub.add_parser("sched_once", help="启动一次定时任务")
     return parser.parse_args()
 
 
@@ -176,6 +177,11 @@ if __name__ == "__main__":
         from schedulers.af_jobs import run_jobs
         logger.info("=== run_jobs start ===")
         run_jobs()
+
+    elif args.command == "sched_once":
+        from schedulers.af_jobs import run_jobs_once
+        logger.info("=== run_jobs_once start ===")
+        run_jobs_once()
 
     elif args.command == "init_data":
         from scripts import system_init

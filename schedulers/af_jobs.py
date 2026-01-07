@@ -83,3 +83,8 @@ def run_jobs() -> None:
     while True:
         schedule.run_pending()
         time.sleep(1)  # 每1秒检查一次任务
+
+
+def run_jobs_once() -> None:
+    """运行定时任务。"""
+    crawl_users_onelink_templates_job()
