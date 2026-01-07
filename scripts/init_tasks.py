@@ -32,7 +32,7 @@ from typing import List, Dict, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model.task import TaskDAO
-from model.user import UserDAO
+from model.user import AfUserDAO
 from model.user_app import UserAppDAO
 from core.db import mysql_pool
 
@@ -73,7 +73,7 @@ class TaskInitializer:
                 return 0
         
         # 获取所有启用的用户
-        users = UserDAO.get_enabled_users()
+        users = AfUserDAO.get_enabled_users()
         if not users:
             logger.warning("没有找到启用的用户")
             return 0

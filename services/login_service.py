@@ -8,7 +8,7 @@ from requests import Session
 from core.session import session_manager
 from core.proxy import proxy_pool, ProxyPool
 from config.settings import USE_PROXY
-from model.user import UserDAO, UserProxyDAO
+from model.user import AfUserDAO, UserProxyDAO
 from services.otp_service import (
     get_2fa_code_by_pid as _get_2fa_code_by_pid,
     get_2fa_code_by_username as _get_2fa_code_by_username,
@@ -65,12 +65,12 @@ def get_session_by_user(username:str=None, password:str=None, pid:str=None) -> S
         raise ValueError("get_session_by_user username and pid are required")
 
     if username is None or username == "":
-        if user := UserDAO.get_user_by_pid(pid):
+        if user := AfUserDAO.get_user_by_pid(pid):
             username = user["email"]
             password = user["password"]
-            
+
     elif pid is None or pid == "":
-        if user := UserDAO.get_user_by_email(username):
+        if user := AfUserDAO.get_user_by_email(username):
             username = user["email"]
             password = user["password"]
      
@@ -99,7 +99,7 @@ def get_session_by_pid(pid: str) -> Session:
     - 自动查 `UserDAO.get_user_by_pid(pid)` 获取用户名与密码
     - 自动查 `UserProxyDAO.get_by_pid(pid)` 生成 `proxies` 与 `browser_context_args`
     """
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     if not user:
         raise ValueError(f"User with pid={pid} not found.")
 

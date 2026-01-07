@@ -2,7 +2,7 @@
 import json
 from model import af_onelink_template
 from services.login_service import get_session_by_pid, get_session_by_user
-from model.user import PidConfigDAO, UserDAO
+from model.user import PidConfigDAO, AfUserDAO
 from model.af_handshake import AfHandshakeDAO
 import config.af_config as cfg
 from utils.retry import request_with_retry
@@ -122,20 +122,25 @@ def add_user_prt(pid:str,username:str, password:str, prt_list:list[str]):
 
 def prt_auth(pid:str, prt:str):
     """ pid 增加 prt 用于 Authorized agencies """
-    
+    new_prt_list = []
     # 检查 prt 是否为空
     if not prt:
         raise Exception("prt is empty")
 
+    if ',' in prt:
+        new_prt_list = prt.split(',')
+    else:
+        new_prt_list.append(prt)
+
     # 先从数据库握手表查该 pid 关联的所有 prt 做比较
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     user_id = user["id"] if user and user["id"] else None
     if not user_id:
         raise Exception(f"No af_user.id found for pid {pid}")
 
     # 检查 prt 是否有效
-    if not is_prt_valid(pid, prt):
-        raise Exception(f"prt {prt} is invalid")
+    # if not is_prt_valid(pid, prt):
+    #     raise Exception(f"prt {prt} is invalid")
 
     # 获取 pid 已授权的 prt 列表
     prt_list = get_user_prt_list(pid, user["email"], user["password"])
@@ -143,17 +148,18 @@ def prt_auth(pid:str, prt:str):
         raise Exception(f"failed to get prt list for pid {pid}")
 
     # 若远端已包含该 prt，则无需重复添加，但同步握手关系
-    if prt in prt_list:
-        logger.info(f"prt {prt} already in list for pid {pid}")
-        try:
-            # 同步整表到远端列表
-            ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
-            logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
-        except Exception as e:
-            logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
-        return prt_list
+    # if prt in prt_list:
+    #     logger.info(f"prt {prt} already in list for pid {pid}")
+    #     try:
+    #         # 同步整表到远端列表
+    #         ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
+    #         logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
+    #     except Exception as e:
+    #         logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
+    #     return prt_list
     
-    prt_list.append(prt)
+    # 合并新 prt 列表
+    prt_list.extend(new_prt_list)
     # 添加 prt 到 pid 授权列表
     result = add_user_prt(pid, user["email"], user["password"], prt_list)
     try:
@@ -347,7 +353,7 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
     note = ''
     config_note = ''
     if pid is None and username is not None:
-        user = UserDAO.get_user_by_email(username)
+        user = AfUserDAO.get_user_by_email(username)
         pid_config = PidConfigDAO.get_by_email(pid)
         if user is None or user["pid"] is None or pid_config is None:
             raise ValueError(f"User or User Pid not found for email: {username}")
@@ -363,7 +369,7 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
             password = pid_config["password"]
 
     if pid is not None and (username is None or password is None):
-        user = UserDAO.get_user_by_pid(pid)
+        user = AfUserDAO.get_user_by_pid(pid)
         pid_config = PidConfigDAO.get_by_pid(pid)
         if user is None or user["email"] is None or user["password"] is None or pid_config is None:
             raise ValueError(f"User or User Credentials not found for pid: {pid}")
@@ -418,10 +424,10 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
         logger.info("SET adv privacy data success")
 
         PidConfigDAO.update_note_by_pid(pid, config_note or '' + append_note)
-        UserDAO.update_note_by_pid(pid, note or '' + append_note)
+        AfUserDAO.update_note_by_pid(pid, note or '' + append_note)
 
     except Exception as e:
         logger.warning("SET adv privacy failed for %s -> %s", pid, e)
         PidConfigDAO.update_note_by_pid(pid, config_note or '' + "|刷新失败")
-        UserDAO.update_note_by_pid(pid, note or '' + "|刷新失败")
+        AfUserDAO.update_note_by_pid(pid, note or '' + "|刷新失败")
         raise

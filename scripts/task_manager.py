@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model.task import TaskDAO
-from model.user import UserDAO
+from model.user import AfUserDAO
 from model.user_app import UserAppDAO
 from scripts.init_tasks import TaskInitializer
 
@@ -540,7 +540,7 @@ class TaskManager:
         
         try:
             # 用户统计
-            users = UserDAO.get_enabled_users()
+            users = AfUserDAO.get_enabled_users()
             print(f"启用用户数: {len(users)}")
             
             # 应用统计
