@@ -415,7 +415,7 @@ def sync_adv_privacy():
         username = pid_config["email"]
         password = pid_config["password"]
         try:
-            set_adv_privacy(pid, username, password)
+            set_adv_privacy(username, password, pid)
             logger.info("adv privacy sync success for %s", pid)
         except Exception as e:
             logger.warning("adv privacy sync failed for %s -> %s", pid, e)
