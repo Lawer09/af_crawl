@@ -411,9 +411,9 @@ def sync_adv_privacy():
     logger.info("=== sync_adv_privacy start ===")
     pid_configs = PidConfigDAO.get_enable()
     for pid_config in pid_configs:
-        pid = pid_config["af_pid"]
-        username = pid_config["af_email"]
-        password = pid_config["af_password"]
+        pid = pid_config["pid"]
+        username = pid_config["email"]
+        password = pid_config["password"]
         try:
             set_adv_privacy(pid, username, password)
             logger.info("adv privacy sync success for %s", pid)
