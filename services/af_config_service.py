@@ -356,41 +356,9 @@ def set_pb_config(username:str, password:str, pid:str):
         logger.warning("Mark config active failed: id=%s, pid=%s, err=%s", cfg_id, pid, e)
         raise
 
-
 def set_adv_privacy(username:str = None, password:str = None, pid:str = None, append_note:str = ''):
     """设置广告隐私中的部分参数"""
-    note = ''
-    config_note = ''
-    if pid is None and username is not None:
-        user = AfUserDAO.get_user_by_email(username)
-        pid_config = PidConfigDAO.get_by_email(pid)
-        if user is None or user["pid"] is None or pid_config is None:
-            raise ValueError(f"User or User Pid not found for email: {username}")
-        if user:
-            pid = user["pid"]
-            username = user["email"]
-            password = user["password"]
-            note = user["note"]
-        if pid_config:
-            pid = pid_config["pid"]
-            config_note = pid_config["note"]
-            username = pid_config["email"]
-            password = pid_config["password"]
-
-    if pid is not None and (username is None or password is None):
-        user = AfUserDAO.get_user_by_pid(pid)
-        pid_config = PidConfigDAO.get_by_pid(pid)
-        if user is None or user["email"] is None or user["password"] is None or pid_config is None:
-            raise ValueError(f"User or User Credentials not found for pid: {pid}")
-        if user:
-            note = user["note"]
-            username = user["email"]
-            password = user["password"]
-        if pid_config:
-            config_note = pid_config["note"]
-            username = pid_config["email"]
-            password = pid_config["password"]
-
+    
     if pid is None or username is None or password is None:
         raise ValueError("pid, username, password are required")
     
@@ -416,7 +384,8 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
         logger.info("GET adv privacy data success")
 
         append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)"
-        inappevent_val= inappevent_val[0] + append_arg
+        inapp_append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)&event=$$sdk(event-name)"
+        inappevent_val= inappevent_val[0] + inapp_append_arg
         install_val = install_val[0] + append_arg
         new_data = {
             "install": {
@@ -432,11 +401,21 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
         resp.raise_for_status()
         logger.info("SET adv privacy data success")
 
-        PidConfigDAO.update_note_by_pid(pid, config_note or '' + append_note)
-        AfUserDAO.update_note_by_pid(pid, note or '' + append_note)
-
     except Exception as e:
         logger.warning("SET adv privacy failed for %s -> %s", pid, e)
-        PidConfigDAO.update_note_by_pid(pid, config_note or '' + "|刷新失败")
-        AfUserDAO.update_note_by_pid(pid, note or '' + "|刷新失败")
         raise
+
+
+def sync_adv_privacy():
+    """同步广告隐私配置"""
+    logger.info("=== sync_adv_privacy start ===")
+    pid_configs = PidConfigDAO.get_enable()
+    for pid_config in pid_configs:
+        pid = pid_config["af_pid"]
+        username = pid_config["af_email"]
+        password = pid_config["af_password"]
+        try:
+            set_adv_privacy(pid, username, password)
+            logger.info("adv privacy sync success for %s", pid)
+        except Exception as e:
+            logger.warning("adv privacy sync failed for %s -> %s", pid, e)
