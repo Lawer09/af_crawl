@@ -148,11 +148,12 @@ def prt_auth(pid:str, prt:str):
         prt_list = get_user_prt_list(pid, user["email"], user["password"])
         if not prt_list:
             raise Exception(f"failed to get prt list for pid {pid}")
+        local_prt_list = prt_list
 
     append_prt_lsit = []
 
     for new_prt in new_prt_list:
-        if new_prt not in local_prt_list:
+        if new_prt not in local_prt_list and new_prt != "":
             append_prt_lsit.append(new_prt)
             
     # 若远端已包含该 prt，则无需重复添加，但同步握手关系
@@ -167,9 +168,9 @@ def prt_auth(pid:str, prt:str):
     #     return prt_list
     
     # 合并新 prt 列表
-    prt_list.extend(append_prt_lsit)
+    local_prt_list.extend(append_prt_lsit)
     # 添加 prt 到 pid 授权列表
-    result = add_user_prt(pid, user["email"], user["password"], prt_list)
+    result = add_user_prt(pid, user["email"], user["password"], local_prt_list)
     try:
         AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
     except Exception as e:
