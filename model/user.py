@@ -8,8 +8,26 @@ from urllib.parse import urlsplit, quote
 
 logger = logging.getLogger(__name__)
 
+class UsersDAO:
+    """users 表简单封装"""
 
-class UserDAO:
+    TABLE = "users"
+
+    @classmethod
+    def get_user_by_name(cls, name: str) -> Optional[Dict]:
+        try:
+            rows = mysql_pool.select(
+                f"SELECT user_id, `name`, system_type FROM {cls.TABLE} WHERE `name` = %s",
+                (name,)
+            )
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user by email: {e}")
+            return None
+
+class AfUserDAO:
     """af_user 表简单封装"""
 
     TABLE = "af_user"
@@ -24,7 +42,7 @@ class UserDAO:
 
         try:
             rows = mysql_pool.select(
-                f"SELECT pid, email, password, account_type, 2fa_key FROM {cls.TABLE} WHERE email = %s",
+                f"SELECT pid, email, password, account_type, 2fa_key, note FROM {cls.TABLE} WHERE email = %s",
                 (email,)
             )
 
@@ -40,7 +58,7 @@ class UserDAO:
         """根据 pid 查询用户（当 pid='pid'）"""
         try:
             rows = mysql_pool.select(
-                f"SELECT id, email, password, account_type, 2fa_key FROM {cls.TABLE} WHERE pid = %s",
+                f"SELECT id, email, password, account_type, note, 2fa_key FROM {cls.TABLE} WHERE pid = %s",
                 (pid,)
             )
             if rows:
@@ -77,6 +95,27 @@ class UserDAO:
             return 0
 
     @classmethod
+    def update_note_by_pid(cls, pid: str, note: str) -> int:
+        """更新指定 pid 的 note，返回受影响的行数。"""
+        try:
+            sql = f"UPDATE {cls.TABLE} SET note = %s WHERE pid = %s"
+            affected = mysql_pool.execute(sql, (note, pid))
+            return int(affected or 0)
+        except Exception as e:
+            logger.error(f"Error updating note for pid={pid}: {e}")
+            return 0
+
+    @classmethod
+    def update_user(cls, user: dict):
+        sql = f"""
+        UPDATE {cls.TABLE}
+        SET get_date = %s
+        WHERE pid = %s
+        """
+        affected = mysql_pool.execute(sql, (user['get_date'], user['pid'])) 
+        return int(affected or 0)
+
+    @classmethod
     def save_user(cls, email: str, password: str, account_type: str):
         sql = f"""
         INSERT INTO {cls.TABLE} (email, password, account_type, enable)
@@ -84,6 +123,15 @@ class UserDAO:
         ON DUPLICATE KEY UPDATE password=VALUES(password), account_type=VALUES(account_type)
         """
         mysql_pool.execute(sql, (email, password, account_type)) 
+
+    @classmethod
+    def create_user(cls, user: dict):
+        sql = f"""
+        INSERT INTO {cls.TABLE} (email, password, account_type, pid, get_date, own, system_type)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        ON DUPLICATE KEY UPDATE password=VALUES(password), account_type=VALUES(account_type), get_date=VALUES(get_date), own=VALUES(own), system_type=VALUES(system_type)
+        """
+        mysql_pool.execute(sql, (user['email'], user['password'], user['account_type'], user['pid'], user['get_date'], user['own'], user['system_type'])) 
 
     @classmethod
     def get_users_by_emails(cls, emails: List[str]) -> Dict[str, Dict]:
@@ -103,6 +151,82 @@ class UserDAO:
         sql = f"SELECT pid, email, password, account_type FROM {cls.TABLE} WHERE pid IN ({placeholders})"
         rows = mysql_pool.select(sql, tuple(pids))
         return {row['pid']: {'email': row['email'], 'password': row['password'], 'account_type': row['account_type']} for row in rows}
+
+
+class PidConfigDAO:
+    """af_pid_config 表简单封装"""
+
+    TABLE = "af_pid_config"
+
+    @classmethod
+    def get_enable(cls,) -> Optional[List[Dict]]:
+        """根据 pid 查询 pid_config（当 pid='pid'）"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT id, af_pid as pid, af_email as email, af_password as password, note FROM {cls.TABLE}",
+            )
+            if rows:
+                return rows
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching pid_config by pid: {e}")
+            return None
+
+    @classmethod
+    def get_by_pid(cls, pid: str) -> Optional[Dict]:
+        """根据 pid 查询 pid_config（当 pid='pid'）"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT id, af_pid as pid, af_email as email, af_password as password, note FROM {cls.TABLE} WHERE af_pid = %s",
+                (pid,)
+            )
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching pid_config by pid: {e}")
+            return None
+
+    @classmethod
+    def get_by_email(cls, email: str) -> Optional[Dict]:
+        """根据 email 查询 pid_config（当 pid='pid'）"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT id, af_pid as pid, af_email as email, af_password as password, note FROM {cls.TABLE} WHERE email = %s",
+                (email,)
+            )
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching pid_config by email: {e}")
+            return None
+
+    @classmethod
+    def get_note_by_pid(cls, pid: str) -> Optional[str]:
+        """仅返回用户 note（便于外部关系映射）"""
+        try:
+            rows = mysql_pool.select(
+                f"SELECT note FROM {cls.TABLE} WHERE pid = %s LIMIT 1",
+                (pid,)
+            )
+            if rows:
+                return rows[0]["note"]  # type: ignore
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching note by pid: {e}")
+            return None
+
+    @classmethod
+    def update_note_by_pid(cls, pid: str, note: str) -> int:
+        """更新指定 pid 的 note，返回受影响的行数。"""
+        try:
+            sql = f"UPDATE {cls.TABLE} SET note = %s WHERE af_pid = %s"
+            affected = mysql_pool.execute(sql, (note, pid))
+            return int(affected or 0)
+        except Exception as e:
+            logger.error(f"Error updating note for pid={pid}: {e}")
+            return 0
 
 
 def _mask_proxy_for_log(proxy_url: str) -> str:

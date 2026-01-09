@@ -181,10 +181,14 @@ def create_pid_task(date:str) -> None:
 def create_af_now_task():
     """创建应用数据任务, csv 数据, 昨天日期"""
     from datetime import datetime, timedelta
-
-    yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
-    logger.info(f"create task for date={yesterday_str}")
-    create_pid_task(yesterday_str)
+    FS_LOG_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/067033b4-ac8d-4f41-85ec-4852df148932"
+    try:
+        yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
+        logger.info(f"create task for date={yesterday_str}")
+        create_pid_task(yesterday_str)
+    except Exception as e:
+        logger.error(f"create_af_now_task fail: {str(e)}")
+        fs_service.send_feishu_text(FS_LOG_WEBHOOK, f"创建Crawl任务失败: {str(e)}")
 
 def get_tasks_pid(tasks: list[dict], system_type: int) -> list[str]:
     """获取任务列表数据中的 pid"""

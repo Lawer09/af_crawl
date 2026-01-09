@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 运行 Web：激活虚拟环境、关闭旧进程、后台启动 main.py web
+# 运行程序：激活虚拟环境、关闭旧进程、后台启动 main.py + 自定义参数
 set -e
 set -o pipefail
 
@@ -8,13 +8,31 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR"
 MAIN_SCRIPT="main.py"
-LOG_FILE="$SCRIPT_DIR/run_web.log"
-PID_FILE="$SCRIPT_DIR/run_web.pid"
+LOG_FILE="$SCRIPT_DIR/run_app.log"  # 日志文件名适配通用场景
+PID_FILE="$SCRIPT_DIR/run_app.pid"  # PID文件名适配通用场景
 
 # 时间戳
 ts() { date +"%Y-%m-%d %H:%M:%S"; }
 
-echo "[$(ts)] === 启动 Web 服务脚本 ==="
+# 显示使用帮助
+show_help() {
+  echo "[$(ts)] === 程序启动脚本使用帮助 ==="
+  echo "用法: $0 <运行参数>"
+  echo "示例: "
+  echo "  $0 web          # 启动 web 服务"
+  echo "  $0 api          # 启动 api 服务"
+  echo "  $0 worker       # 启动 worker 进程"
+  exit 1
+}
+
+# 校验传入参数
+if [ $# -eq 0 ]; then
+  echo "[$(ts)] 错误：未传入运行参数！"
+  show_help
+fi
+RUN_ARGS="$*"  # 接收所有传入的参数（支持多个参数，比如 "web --port 8080"）
+
+echo "[$(ts)] === 启动程序脚本 (参数: $RUN_ARGS) ==="
 cd "$REPO_DIR" || { echo "[$(ts)] 无法进入目录 $REPO_DIR"; exit 1; }
 
 # 选择系统 Python
@@ -98,8 +116,8 @@ if [ -f "$PID_FILE" ]; then
   rm -f "$PID_FILE"
 fi
 
-# 后台启动 Web 服务
-CMD="python $MAIN_SCRIPT web"
+# 后台启动程序（使用传入的自定义参数）
+CMD="python $MAIN_SCRIPT $RUN_ARGS"
 
 echo "[$(ts)] 启动命令: $CMD"
 nohup bash -c "exec $CMD" >> "$LOG_FILE" 2>&1 &

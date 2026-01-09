@@ -5,7 +5,8 @@ import io
 import threading
 from urllib.parse import urlparse, parse_qs
 
-from model.user import UserDAO
+from model.user import AfUserDAO
+from model.google_auth import GoogleAuthDAO
 from utils import get_totp_token
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def get_2fa_code_by_pid(pid: str) -> str:
     - 从 `af_user` 表读取 `2fa_key`
     - 未找到用户或密钥为空时抛出明确的 ValueError
     """
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     if not user:
         raise ValueError(f"User with pid={pid} not found.")
 
@@ -60,10 +61,10 @@ def get_2fa_code_by_username(username: str) -> str:
     - 若 `2fa_key` 为空或缺失，则返回明确提示：`pid 未添加密钥` 或 `用户未添加密钥`
     - 若 email 查询不到，兼容传入的 username 可能是 pid
     """
-    user = UserDAO.get_user_by_email(username)
+    user = AfUserDAO.get_user_by_email(username)
     if not user:
         # 兼容传入的 username 可能是 pid 的情况
-        user = UserDAO.get_user_by_pid(username)
+        user = AfUserDAO.get_user_by_pid(username)
         if not user:
             raise ValueError(f"User {username} not found.")
 
@@ -112,7 +113,7 @@ def save_2fa_secret_from_qr(pid: str, image_bytes: bytes) -> dict:
     """
     if not pid or not pid.strip():
         raise ValueError("pid 不能为空")
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     if not user:
         raise ValueError(f"pid {pid} 不存在")
 
@@ -156,9 +157,9 @@ def save_2fa_secret_from_qr(pid: str, image_bytes: bytes) -> dict:
         raise ValueError("不是二维码信息或格式不正确（未找到 secret 参数）")
 
     # 入库
-    affected = UserDAO.update_2fa_key_by_pid(pid, secret)
+    affected = AfUserDAO.update_2fa_key_by_pid(pid, secret)
     if affected <= 0:
-        raise ValueError("写入密钥失败，请稍后重试")
+        raise ValueError("写入密钥失败，pid不存在或密钥相同，请稍后重试")
     logger.info("Updated 2FA secret for pid=%s", pid)
     return {"status": "success", "pid": pid, "secret": secret}
 
@@ -172,7 +173,7 @@ def save_2fa_secret(pid: str, secret_or_otpauth: str) -> dict:
     """
     if not pid or not pid.strip():
         raise ValueError("pid 不能为空")
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     if not user:
         raise ValueError(f"pid {pid} 不存在")
 
@@ -190,8 +191,60 @@ def save_2fa_secret(pid: str, secret_or_otpauth: str) -> dict:
     if not secret:
         raise ValueError("secret 不能为空")
 
-    affected = UserDAO.update_2fa_key_by_pid(pid, secret)
+    affected = AfUserDAO.update_2fa_key_by_pid(pid, secret)
     if affected <= 0:
-        raise ValueError("写入密钥失败，请稍后重试")
+        raise ValueError("写入密钥失败，pid不存在或密钥相同，请稍后重试")
     logger.info("Saved 2FA secret directly for pid=%s", pid)
     return {"status": "success", "pid": pid, "secret": secret}
+
+
+def get_2fa_code_by_account(account: str) -> str:
+    """根据 account 获取 google_auth 的 2FA 验证码"""
+    record = GoogleAuthDAO.get_by_account(account)
+    if not record:
+        raise ValueError(f"Account {account} not found in google_auth.")
+
+    key = record.get("key")
+    if not key or not str(key).strip():
+        raise ValueError(f"Account {account} has no 2FA key.")
+
+    return get_totp_token(str(key))
+
+def get_2fa_code_by_bid(bid: int) -> str:
+    """根据 bid 获取 google_auth 的 2FA 验证码"""
+    record = GoogleAuthDAO.get_by_bid(bid)
+    if not record:
+        raise ValueError(f"Bid {bid} not found in google_auth.")
+
+    key = record.get("key")
+    if not key or not str(key).strip():
+        raise ValueError(f"Bid {bid} has no 2FA key.")
+
+    return get_totp_token(str(key)), record.get("account")
+
+def save_google_auth_secret(account: str, secret_or_otpauth: str, note: str = None, userid: int = None) -> dict:
+    """保存 google_auth 密钥"""
+    if not account or not account.strip():
+        raise ValueError("account 不能为空")
+
+    if not secret_or_otpauth or not str(secret_or_otpauth).strip():
+        raise ValueError("secret 不能为空")
+
+    secret = str(secret_or_otpauth).strip()
+    if "otpauth://" in secret:
+        parsed = _parse_otpauth_secret(secret)
+        if not parsed:
+            raise ValueError("不是二维码信息或格式不正确（未找到 secret 参数）")
+        secret = parsed.strip()
+
+    if not secret:
+        raise ValueError("secret 不能为空")
+
+    # Pass userid as both created_by and own, but only for new records (handled by DAO)
+    GoogleAuthDAO.save_auth(account, secret, note, created_by=userid, own=userid)
+    logger.info("Saved google_auth secret for account=%s", account)
+    return {"status": "success", "account": account, "secret": secret}
+
+def get_google_auth_by_own(own: int) -> list[dict]:
+    """根据 own 获取 google_auth 列表 (不包含 key)"""
+    return GoogleAuthDAO.get_by_own(own)

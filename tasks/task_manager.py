@@ -36,7 +36,7 @@ def run():
             last_1am_date = current_date
 
         # 获取任务
-        tasks = TaskDAO.get_pending()
+        tasks = TaskDAO.get_pending(min_date=current_date.strftime("%Y-%m-%d 00:00:00"))
         if not tasks:
             logger.info("没有待处理任务")
             try:
@@ -46,11 +46,11 @@ def run():
                     fs_service.send_sys_notify("添加 AF APP DATA 任务")
             except Exception as e:
                 logger.error(f"检查任务状态失败: {e}")
-            time.sleep(60*5)
+            time.sleep(60*3)
             continue
 
         for task in tasks:
-            now = datetime.now()
+            now = datetime.now(ZoneInfo("Asia/Shanghai"))
             if now.hour == 0:
                 break
 

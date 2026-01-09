@@ -83,7 +83,9 @@ def _parse_args():
     sub.add_parser("create_tasks", help="创建应用数据任务")
 
     sub.add_parser("init_data", help="创建应用数据任务")
-
+    sub.add_parser("sched", help="启动定时任务")
+    sub.add_parser("sched_once", help="启动一次定时任务")
+    sub.add_parser("sync_adv_privacy", help="同步广告隐私配置")
     return parser.parse_args()
 
 
@@ -172,6 +174,22 @@ if __name__ == "__main__":
         logger.info("=== create_tasks start ===")
         task_service.create_af_now_task()
     
+    elif args.command == "sched":
+        from schedulers.af_jobs import run_jobs
+        logger.info("=== run_jobs start ===")
+        run_jobs()
+
+    elif args.command == "sched_once":
+        from schedulers.af_jobs import run_jobs_once
+        logger.info("=== run_jobs_once start ===")
+        run_jobs_once()
+
+    elif args.command == "sync_adv_privacy":
+        from services import af_config_service
+        logger.info("=== sync_adv_privacy start ===")
+        af_config_service.sync_adv_privacy()
+        
+
     elif args.command == "init_data":
         from scripts import system_init
 

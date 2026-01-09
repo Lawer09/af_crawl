@@ -1,6 +1,8 @@
 # af 相关的验证
+import json
+from model import af_onelink_template
 from services.login_service import get_session_by_pid, get_session_by_user
-from model.user import UserDAO
+from model.user import PidConfigDAO, AfUserDAO
 from model.af_handshake import AfHandshakeDAO
 import config.af_config as cfg
 from utils.retry import request_with_retry
@@ -120,46 +122,104 @@ def add_user_prt(pid:str,username:str, password:str, prt_list:list[str]):
 
 def prt_auth(pid:str, prt:str):
     """ pid 增加 prt 用于 Authorized agencies """
-    
+    new_prt_list = []
     # 检查 prt 是否为空
     if not prt:
         raise Exception("prt is empty")
 
+    if ',' in prt:
+        new_prt_list = prt.split(',')
+    else:
+        new_prt_list.append(prt)
+
     # 先从数据库握手表查该 pid 关联的所有 prt 做比较
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     user_id = user["id"] if user and user["id"] else None
     if not user_id:
         raise Exception(f"No af_user.id found for pid {pid}")
 
     # 检查 prt 是否有效
-    if not is_prt_valid(pid, prt):
-        raise Exception(f"prt {prt} is invalid")
+    # if not is_prt_valid(pid, prt):
+    #     raise Exception(f"prt {prt} is invalid")
 
-    # 获取 pid 已授权的 prt 列表
-    prt_list = get_user_prt_list(pid, user["email"], user["password"])
-    if not prt_list:
-        raise Exception(f"failed to get prt list for pid {pid}")
+    local_prt_list = AfHandshakeDAO.get_prts_by_user(user_id)
+    if not local_prt_list or len(local_prt_list) < 1:
+        # 获取 pid 已授权的 prt 列表
+        prt_list = get_user_prt_list(pid, user["email"], user["password"])
+        if not prt_list:
+            raise Exception(f"failed to get prt list for pid {pid}")
+        local_prt_list = prt_list
 
+    append_prt_lsit = []
+
+    for new_prt in new_prt_list:
+        if new_prt not in local_prt_list and new_prt != "":
+            append_prt_lsit.append(new_prt)
+            
     # 若远端已包含该 prt，则无需重复添加，但同步握手关系
-    if prt in prt_list:
-        logger.info(f"prt {prt} already in list for pid {pid}")
-        try:
-            # 同步整表到远端列表
-            ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
-            logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
-        except Exception as e:
-            logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
-        return prt_list
+    # if prt in prt_list:
+    #     logger.info(f"prt {prt} already in list for pid {pid}")
+    #     try:
+    #         # 同步整表到远端列表
+    #         ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
+    #         logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
+    #     except Exception as e:
+    #         logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
+    #     return prt_list
     
-    prt_list.append(prt)
+    # 合并新 prt 列表
+    local_prt_list.extend(append_prt_lsit)
     # 添加 prt 到 pid 授权列表
-    result = add_user_prt(pid, user["email"], user["password"], prt_list)
+    result = add_user_prt(pid, user["email"], user["password"], local_prt_list)
     try:
         AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
     except Exception as e:
         logger.warning("Handshake sync failed: pid=%s prt=%s -> %s", pid, prt, e)
-        raise Exception(f"failed for {pid} -> {e}")
     return result
+
+
+def get_onlink_templates(username:str, password:str, app_id:str, pid:str):
+    url = f"https://hq1.appsflyer.com/attribution/data/{app_id}/{pid}"
+    
+    sess = get_session_by_user(username, password, pid)
+    headers = {
+        "Referer": url,
+        "Accept": "application/json",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+    try:
+        resp = request_with_retry(sess, "GET", url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        try:
+            data = resp.json()
+            
+            if "ok" in data and data["ok"]:
+                templates = data["data"]["oneLink"]["templates"]
+                for template in templates:
+                    template["app_id"] = app_id
+                    template["pid"] = pid
+                    template["baseUrl"] += "?" 
+                    template["base_url"] = template["baseUrl"]
+                return templates, data["data"]["oneLink"]["selectedTemplate"]
+            else:
+                logger.info(f"get_onlink_templates {pid} {app_id} fail: {data}")
+            return None, None
+        except ValueError as e:
+            # 非 JSON 或空响应时，记录细节并返回空列表，避免调度失败
+            ct = resp.headers.get("Content-Type")
+            logger.error(
+                "Failed to parse JSON response for pid %s  from %s: %s. status=%s, content-type=%s, body=%s",
+                pid,
+                url,
+                e,
+                resp.status_code,
+                ct,
+                (resp.text or "")[:100],
+            )
+            raise Exception("get fail")
+    except Exception as e:
+        logger.warning("get_af_onlink_templates request failed for %s -> %s; skip", pid, e)
+        raise Exception(f"failed for {pid} -> {e}")
 
 
 def set_pb_config(username:str, password:str, pid:str):
@@ -295,3 +355,67 @@ def set_pb_config(username:str, password:str, pid:str):
     except Exception as e:
         logger.warning("Mark config active failed: id=%s, pid=%s, err=%s", cfg_id, pid, e)
         raise
+
+def set_adv_privacy(username:str = None, password:str = None, pid:str = None, append_note:str = ''):
+    """设置广告隐私中的部分参数"""
+    
+    if pid is None or username is None or password is None:
+        raise ValueError("pid, username, password are required")
+    
+    # 获取已配置的信息
+    try:
+        URL = f"https://hq1.appsflyer.com/partners/postbacks/{pid}/ap"
+        HEADERS = {
+            "Referer": URL
+        }
+        logger.info("GET adv privacy url:%s, headers:%s pid:%s", URL, HEADERS, pid)
+        sess = get_session_by_user(username, password, pid)
+        resp = request_with_retry(sess, "GET", URL, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        resp_json = resp.json()
+
+        if resp_json["inappevent"]["value"] == '':
+            logger.warning("inappevent value is empty for %s", pid)
+            return
+
+        inappevent_val = json.loads(resp_json["inappevent"]["value"])
+        install_val = json.loads(resp_json["install"]["value"])
+
+        logger.info("GET adv privacy data success")
+
+        append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)"
+        inapp_append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)&event=$$sdk(event-name)"
+        inappevent_val= inappevent_val[0] + inapp_append_arg
+        install_val = install_val[0] + append_arg
+        new_data = {
+            "install": {
+                "isActive":True,
+                "value" : install_val
+            },
+            "inappevent": {
+                "isActive":True,
+                "value" : inappevent_val
+            }
+        }
+        resp = request_with_retry(sess, "PUT", URL, json=new_data, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+        logger.info("SET adv privacy data success")
+
+    except Exception as e:
+        logger.warning("SET adv privacy failed for %s -> %s", pid, e)
+        raise
+
+
+def sync_adv_privacy():
+    """同步广告隐私配置"""
+    logger.info("=== sync_adv_privacy start ===")
+    pid_configs = PidConfigDAO.get_enable()
+    for pid_config in pid_configs:
+        pid = pid_config["pid"]
+        username = pid_config["email"]
+        password = pid_config["password"]
+        try:
+            set_adv_privacy(username, password, pid)
+            logger.info("adv privacy sync success for %s", pid)
+        except Exception as e:
+            logger.warning("adv privacy sync failed for %s -> %s", pid, e)

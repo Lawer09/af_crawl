@@ -8,7 +8,7 @@ from requests import Session
 from core.session import session_manager
 from core.proxy import proxy_pool, ProxyPool
 from config.settings import USE_PROXY
-from model.user import UserDAO, UserProxyDAO
+from model.user import AfUserDAO, UserProxyDAO
 from services.otp_service import (
     get_2fa_code_by_pid as _get_2fa_code_by_pid,
     get_2fa_code_by_username as _get_2fa_code_by_username,
@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 def get_session(username: str, password: str, proxies: dict | None = None, browser_context_args: dict = {}) -> Session:
     """返回 session 可直接传给 requests"""
+    if not username or not password:
+        raise ValueError("get_session username and password are required")
+    
     # 1. 拿到代理（绑定用户名）
     if proxies is None and USE_PROXY:
         proxy_url = proxy_pool.get_proxy(username)
@@ -55,9 +58,25 @@ def get_session(username: str, password: str, proxies: dict | None = None, brows
     return sess
 
 
-def get_session_by_user(username:str, password:str, pid:str) -> Session:
+def get_session_by_user(username:str=None, password:str=None, pid:str=None) -> Session:
     """通过用户名与密码获取会话，该接口在，使用随机代理"""
-   
+    
+    if username is None or pid is None:
+        raise ValueError("get_session_by_user username and pid are required")
+
+    if username is None or username == "":
+        if user := AfUserDAO.get_user_by_pid(pid):
+            username = user["email"]
+            password = user["password"]
+
+    elif pid is None or pid == "":
+        if user := AfUserDAO.get_user_by_email(username):
+            username = user["email"]
+            password = user["password"]
+     
+    if username is None or username == '' or password is None or password == '':
+        raise ValueError(f"User with pid={pid} or email={username} not found.")
+
     proxy_rec = UserProxyDAO.get_by_pid(pid)
     if not proxy_rec:
         proxy_rec = UserProxyDAO.get_random_one()
@@ -80,7 +99,7 @@ def get_session_by_pid(pid: str) -> Session:
     - 自动查 `UserDAO.get_user_by_pid(pid)` 获取用户名与密码
     - 自动查 `UserProxyDAO.get_by_pid(pid)` 生成 `proxies` 与 `browser_context_args`
     """
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     if not user:
         raise ValueError(f"User with pid={pid} not found.")
 

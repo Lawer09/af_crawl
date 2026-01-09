@@ -9,7 +9,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Tuple, Any, Optional
 
-from model.user import UserDAO
+from model.user import AfUserDAO
 from model.user_app import UserAppDAO
 from model.task import TaskDAO
 from services.data_service import fetch_and_save_table_data
@@ -50,7 +50,7 @@ def sync_app_data(
         logger.info(f"Starting data sync for user: {username}, app: {app_id}")
         
         # 获取用户信息
-        user = UserDAO.get_user_by_email(username)
+        user = AfUserDAO.get_user_by_email(username)
         if not user:
             raise ValueError(f"User not found: {username}")
         
@@ -295,7 +295,7 @@ def run(days: int = 1):
     TaskDAO.init_table()
 
     # 获取所有启用用户
-    users = UserDAO.get_enabled_users()
+    users = AfUserDAO.get_enabled_users()
     if not users:
         logger.info("没有启用的用户")
         return
