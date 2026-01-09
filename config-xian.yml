@@ -1,0 +1,60 @@
+name: XIAN
+
+database:
+  redis:
+    local:
+      host: 127.0.0.1
+      port: 6379
+      db: 0
+      password: None
+      ssl: False
+      pool_maxsize: 10
+      decode_responses: True
+      socket_timeout: 5 (seconds)
+      client_name: 'af_crawl'
+    rds:
+      host: redis-1.rds.amazonaws.com
+      port: 6379
+      db: 1
+      password: None
+      ssl: False
+      pool_maxsize: 10
+      decode_responses: True
+      socket_timeout: 5 (seconds)
+      client_name: 'af_crawl'
+  mysql:
+    local:
+      host: mysql
+      port: 3306
+      db: af_crawl
+      password: None
+      ssl: False
+      pool_maxsize: 10
+      decode_responses: True
+      socket_timeout: 5 (seconds)
+      client_name: 'af_crawl'
+    adbink:
+      host: mysql-1.rds.amazonaws.com
+      port: 3306
+      db: af_crawl
+      password: None
+      ssl: False
+      pool_maxsize: 10
+      decode_responses: True
+      socket_timeout: 5 (seconds)
+      client_name: 'af_crawl'
+    report:
+      host: mysql-2.rds.amazonaws.com
+      port: 3306
+      db: af_crawl
+      password: None
+      ssl: False
+      pool_maxsize: 10
+      decode_responses: True
+      socket_timeout: 5 (seconds)
+      client_name: 'af_crawl'
+
+appflayer-crawl:
+  data:
+    offer-id: adset
+    aff-id: adset-id
