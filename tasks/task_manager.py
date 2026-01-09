@@ -39,14 +39,7 @@ def run():
         tasks = TaskDAO.get_pending()
         if not tasks:
             logger.info("没有待处理任务")
-            try:
-                if TaskDAO.should_create_new_tasks(interval_hours=CRAWLER["interval_hours"]):
-                    create_af_now_task()
-                    logger.info(f"没有待处理任务且距上次更新时间超过{CRAWLER['interval_hours']}小时，已创建新任务")
-                    fs_service.send_sys_notify("添加 AF APP DATA 任务")
-            except Exception as e:
-                logger.error(f"检查任务状态失败: {e}")
-            time.sleep(60*5)
+            time.sleep(60*3)
             continue
 
         for task in tasks:

@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Tuple, Optional
-
 import mysql.connector
 from mysql.connector.pooling import MySQLConnectionPool, PooledMySQLConnection
-
 from config.settings import MYSQL, REPORT_MYSQL
 import time
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 
 _SLOW_SEC = float(os.getenv("MYSQL_SLOW_QUERY_SECONDS", "5"))
-class MySQLPool:
+
+class MySQLClient:
 
     def __init__(self, config: dict):
         try:
@@ -109,6 +109,152 @@ class MySQLPool:
             cursor.close()
             conn.close()
 
+class RedisClient:
+
+    def __init__(self, config: Optional[dict] = None) -> None:
+        self._lock = threading.RLock()
+        self._config = config or _load_config_from_sources()
+        self._pool: redis.ConnectionPool = self._create_pool(self._config)
+        self._client: redis.Redis = self._create_client(self._pool, self._config)
+        logger.info(
+            "Redis client initialized: host=%s port=%s db=%s pool=%s ssl=%s",
+            self._config["host"], self._config["port"], self._config["db"], self._config["pool_maxsize"], self._config["ssl"]
+        )
+
+    @staticmethod
+    def _create_pool(cfg: dict) -> redis.ConnectionPool:
+        pool_kwargs = {
+            "host": cfg["host"],
+            "port": cfg["port"],
+            "db": cfg["db"],
+            "password": cfg["password"],
+            "max_connections": cfg["pool_maxsize"],
+            "socket_timeout": cfg["socket_timeout"],
+        }
+
+        if cfg["ssl"]:
+            pool_kwargs["connection_class"] = redis.SSLConnection
+
+        return redis.ConnectionPool(**pool_kwargs)
+
+    @staticmethod
+    def _create_client(pool: redis.ConnectionPool, cfg: dict) -> redis.Redis:
+        return redis.Redis(
+            connection_pool=pool,
+            decode_responses=cfg["decode_responses"],
+            client_name=cfg.get("client_name"),
+        )
+
+    # ------------------ connection handling ------------------
+    def ping(self) -> bool:
+        """Ping Redis server to test connectivity."""
+        try:
+            return bool(self._client.ping())
+        except RedisError as e:
+            logger.error("Redis ping failed: %s", e)
+            return False
+
+    def close(self) -> None:
+        """Close client connections and disconnect pool.
+
+        Safe to call multiple times; guarded by lock to avoid concurrent pool disconnect.
+        """
+        with self._lock:
+            try:
+                try:
+                    self._client.close()
+                except Exception:
+                    # older redis-py may not implement close(); ignore
+                    pass
+                self._pool.disconnect()
+                logger.info("Redis client closed and pool disconnected")
+            except Exception as e:  # pragma: no cover
+                logger.warning("Redis close encountered error: %s", e)
+
+    # ------------------ key-value operations ------------------
+    def set(self, key: str, value: str, *, ex: Optional[int] = None, nx: bool = False, xx: bool = False) -> bool:
+        """Set a key to a value.
+
+        Args:
+            key: Redis key
+            value: String value (use json.dumps for structured data)
+            ex: Expire time in seconds; if provided, sets TTL
+            nx: Only set if key does not exist
+            xx: Only set if key already exists
+        Returns:
+            True if set succeeded; False otherwise.
+        """
+        try:
+            res = self._client.set(name=key, value=value, ex=ex, nx=nx, xx=xx)
+            return bool(res)
+        except RedisError as e:
+            logger.error("Redis set failed key=%s: %s", key, e)
+            return False
+
+    def setex(self, key: str, seconds: int, value: str) -> bool:
+        """Set key to hold the value and set key to expire after `seconds`."""
+        try:
+            res = self._client.setex(name=key, time=seconds, value=value)
+            return bool(res)
+        except RedisError as e:
+            logger.error("Redis setex failed key=%s: %s", key, e)
+            return False
+
+    def get(self, key: str) -> Optional[str]:
+        """Get value of key (returns None if not found or on error)."""
+        try:
+            val = self._client.get(name=key)
+            return val if val is not None else None
+        except RedisError as e:
+            logger.error("Redis get failed key=%s: %s", key, e)
+            return None
+
+    def delete(self, *keys: str) -> int:
+        """Delete one or more keys. Returns number of keys removed."""
+        try:
+            return int(self._client.delete(*keys))
+        except RedisError as e:
+            logger.error("Redis delete failed keys=%s: %s", keys, e)
+            return 0
+
+    # ------------------ expiration management ------------------
+    def expire(self, key: str, seconds: int) -> bool:
+        """Set a timeout on key. Returns True if timeout set."""
+        try:
+            return bool(self._client.expire(name=key, time=seconds))
+        except RedisError as e:
+            logger.error("Redis expire failed key=%s: %s", key, e)
+            return False
+
+    def ttl(self, key: str) -> int:
+        """Get the time to live for key in seconds. Returns -2 if key does not exist, -1 if key exists but has no associated expire."""
+        try:
+            return int(self._client.ttl(name=key))
+        except RedisError as e:
+            logger.error("Redis ttl failed key=%s: %s", key, e)
+            return -2
+
+    def exists(self, key: str) -> bool:
+        """Check if key exists."""
+        try:
+            return int(self._client.exists(key)) > 0
+        except RedisError as e:
+            logger.error("Redis exists failed key=%s: %s", key, e)
+            return False
+
+    # ------------------ helpers ------------------
+    @property
+    def client(self) -> redis.Redis:
+        """Access underlying redis.Redis client (thread-safe)."""
+        return self._client
+
+
+# Module-level singleton, mimic db/mysql_pool style
+try:
+    redis_client = RedisClient()
+except Exception as _e:  # pragma: no cover
+    logger.warning("Redis client initialization failed: %s", _e)
+    redis_client = None
 # 单例
-mysql_pool = MySQLPool(MYSQL)
-report_mysql_pool = MySQLPool(REPORT_MYSQL)
+mysql_pool = MySQLClient(MYSQL)
+report_mysql_pool = MySQLClient(REPORT_MYSQL)

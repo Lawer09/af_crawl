@@ -12,3 +12,5 @@ redis
 qreader
 Pillow
 numpy
+schedule
+PyYAML

@@ -163,6 +163,50 @@ def prt_auth(pid:str, prt:str):
     return result
 
 
+def get_onlink_templates(username:str, password:str, app_id:str, pid:str):
+    url = f"https://hq1.appsflyer.com/attribution/data/{app_id}/{pid}"
+    
+    sess = get_session_by_user(username, password, pid)
+    headers = {
+        "Referer": url,
+        "Accept": "application/json",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+    try:
+        resp = request_with_retry(sess, "GET", url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        try:
+            data = resp.json()
+            
+            if "ok" in data and data["ok"]:
+                templates = data["data"]["oneLink"]["templates"]
+                for template in templates:
+                    template["app_id"] = app_id
+                    template["pid"] = pid
+                    template["baseUrl"] += "?" 
+                    template["base_url"] = template["baseUrl"]
+                return templates, data["data"]["oneLink"]["selectedTemplate"]
+            else:
+                logger.info(f"get_onlink_templates {pid} {app_id} fail: {data}")
+            return None, None
+        except ValueError as e:
+            # 非 JSON 或空响应时，记录细节并返回空列表，避免调度失败
+            ct = resp.headers.get("Content-Type")
+            logger.error(
+                "Failed to parse JSON response for pid %s  from %s: %s. status=%s, content-type=%s, body=%s",
+                pid,
+                url,
+                e,
+                resp.status_code,
+                ct,
+                (resp.text or "")[:100],
+            )
+            raise Exception("get fail")
+    except Exception as e:
+        logger.warning("get_af_onlink_templates request failed for %s -> %s; skip", pid, e)
+        raise Exception(f"failed for {pid} -> {e}")
+
+
 def set_pb_config(username:str, password:str, pid:str):
     """设置 AppsFlyer PB 配置：
     - 先写入 Attribution Postbacks 基础配置
@@ -381,3 +425,18 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
         PidConfigDAO.update_note_by_pid(pid, config_note or '' + "|刷新失败")
         UserDAO.update_note_by_pid(pid, note or '' + "|刷新失败")
         raise
+
+
+def sync_adv_privacy():
+    """同步广告隐私配置"""
+    logger.info("=== sync_adv_privacy start ===")
+    pid_configs = PidConfigDAO.get_enable()
+    for pid_config in pid_configs:
+        pid = pid_config["pid"]
+        username = pid_config["email"]
+        password = pid_config["password"]
+        try:
+            set_adv_privacy(username, password, pid)
+            logger.info("adv privacy sync success for %s", pid)
+        except Exception as e:
+            logger.warning("adv privacy sync failed for %s -> %s", pid, e)
