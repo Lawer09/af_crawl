@@ -13,4 +13,3 @@ qreader
 Pillow
 numpy
 schedule
-PyYAML

@@ -283,14 +283,16 @@ class TaskDAO:
             return mysql_pool.select(sql, (limit,))
 
     @classmethod
-    def get_pending(cls, limit: int = 100) -> List[Dict]:
+    def get_pending(cls,min_date: str, limit: int = 100) -> List[Dict]:
         """
         获取待执行的任务列表（过滤重试次数）
         """
+        
         sql = f"""SELECT * FROM {cls.TABLE}
                  WHERE status='pending' AND next_run_at<=NOW() AND retry < max_retry_count
+                 AND created_at >= %s
                  ORDER BY next_run_at LIMIT %s"""
-        return mysql_pool.select(sql, (limit,))
+        return mysql_pool.select(sql, (min_date, limit))
 
     @classmethod
     def mark_running(cls, task_id: int, device_id: Optional[str] = None):
@@ -542,6 +544,16 @@ class TaskDAO:
             return None
 
     @classmethod
+    def get_last_create_time(cls):
+        """获取任务表最近的创建时间（MAX(created_at)）"""
+        try:
+            row = mysql_pool.fetch_one(f"SELECT MAX(created_at) AS last_create FROM {cls.TABLE}")
+            return row['last_create'] if row and row.get('last_create') else None
+        except Exception as e:
+            logger.exception(f"Failed to get last create time: {e}")
+            return None
+
+    @classmethod
     def exists_pending(cls) -> bool:
         """是否存在可执行的 pending 任务"""
         try:
@@ -559,10 +571,12 @@ class TaskDAO:
             if cls.exists_pending():
                 return False
             last_update = cls.get_last_update_time()
-            if not last_update:
+            last_create = cls.get_last_create_time()
+            if not last_update or not last_create:
                 return True
             from datetime import datetime, timedelta
-            return last_update + timedelta(hours=interval_hours) < datetime.now()
+            return last_update + timedelta(hours=interval_hours) < datetime.now() or last_create + timedelta(days=1) < datetime.now()
+                       
         except Exception as e:
             logger.exception(f"Failed to evaluate should_create_new_tasks: {e}")
             return False

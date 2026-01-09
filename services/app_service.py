@@ -5,7 +5,7 @@ from typing import List, Dict
 
 from services.login_service import get_session, get_session_by_pid
 from model.user_app import UserAppDAO
-from model.user import UserDAO, UserProxyDAO
+from model.user import AfUserDAO, UserProxyDAO
 from services.fs_service import send_sys_notify
 
 import config.af_config as cfg
@@ -103,7 +103,7 @@ def save_apps(apps: List[Dict]):
 def fetch_and_save_apps_by_pid(pid: str) -> List[Dict]:
     """获取某个pid下的app列表并写入数据库，返回列表（带代理与UA）"""
     try:
-        user = UserDAO.get_user_by_pid(pid)
+        user = AfUserDAO.get_user_by_pid(pid)
         if not user:
             logger.error(f"User with pid={pid} not found.")
             return []
@@ -137,7 +137,7 @@ def fetch_and_save_apps_by_pid(pid: str) -> List[Dict]:
 
 def fetch_pid_apps(pid: str) -> List[Dict]:
     """基于 pid 获取实时的 app 列表，使用按 pid 获取的会话，简化代理与UA流程。"""
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     if not user:
         logger.error(f"User with pid={pid} not found.")
         return []
@@ -193,7 +193,7 @@ def update_user_apps():
     
     # 1) 批量获取所有 pid 对应的用户，避免循环内频繁 DB 查询
     pids = [p.get("pid") for p in user_proxies if p.get("pid")]
-    pid_user_map = UserDAO.get_users_by_pids(pids)
+    pid_user_map = AfUserDAO.get_users_by_pids(pids)
 
     # 建立 pid 到代理记录的映射
     proxy_map = {p.get("pid"): p for p in user_proxies if p.get("pid")}

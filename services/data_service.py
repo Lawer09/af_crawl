@@ -183,9 +183,7 @@ def fetch_pid_app_data(pid: str, app_id: str, start_date: str, end_date: str, af
         row["start_date"] = start_date
         row["end_date"] = end_date
         row["days"] = days_cnt
-
     return rows
-
 
 def fetch_csv_by_pid(pid:str, app_id:str, date:str):
     try:
@@ -279,9 +277,9 @@ def save_data_bulk(pid:str, date:str, rows: List[Dict]):
     user_elapsed = time.perf_counter() - t_user
     logger.info(f"UserAppDataDAO.save_data_bulk done in {user_elapsed:.2f}s size={len(rows)}")
     
-    # if SYSTEM_TYPE == "XIAN":
-    #     # 目前西安数据库不知道为什么 af_data表插入会出现限制，先不处理
-    #     return
+    if SYSTEM_TYPE == "XIAN":
+        # 目前西安数据库不知道为什么 af_data表插入会出现限制，先不处理
+        return
 
     try:
         t_af = time.perf_counter()

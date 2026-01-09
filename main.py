@@ -83,7 +83,9 @@ def _parse_args():
     sub.add_parser("create_tasks", help="创建应用数据任务")
 
     sub.add_parser("init_data", help="创建应用数据任务")
-
+    sub.add_parser("sched", help="启动定时任务")
+    sub.add_parser("sched_once", help="启动一次定时任务")
+    sub.add_parser("sync_adv_privacy", help="同步广告隐私配置")
     return parser.parse_args()
 
 

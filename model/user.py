@@ -8,8 +8,26 @@ from urllib.parse import urlsplit, quote
 
 logger = logging.getLogger(__name__)
 
+class UsersDAO:
+    """users 表简单封装"""
 
-class UserDAO:
+    TABLE = "users"
+
+    @classmethod
+    def get_user_by_name(cls, name: str) -> Optional[Dict]:
+        try:
+            rows = mysql_pool.select(
+                f"SELECT user_id, `name`, system_type FROM {cls.TABLE} WHERE `name` = %s",
+                (name,)
+            )
+            if rows:
+                return rows[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching user by email: {e}")
+            return None
+
+class AfUserDAO:
     """af_user 表简单封装"""
 
     TABLE = "af_user"
@@ -88,6 +106,16 @@ class UserDAO:
             return 0
 
     @classmethod
+    def update_user(cls, user: dict):
+        sql = f"""
+        UPDATE {cls.TABLE}
+        SET get_date = %s
+        WHERE pid = %s
+        """
+        affected = mysql_pool.execute(sql, (user['get_date'], user['pid'])) 
+        return int(affected or 0)
+
+    @classmethod
     def save_user(cls, email: str, password: str, account_type: str):
         sql = f"""
         INSERT INTO {cls.TABLE} (email, password, account_type, enable)
@@ -95,6 +123,15 @@ class UserDAO:
         ON DUPLICATE KEY UPDATE password=VALUES(password), account_type=VALUES(account_type)
         """
         mysql_pool.execute(sql, (email, password, account_type)) 
+
+    @classmethod
+    def create_user(cls, user: dict):
+        sql = f"""
+        INSERT INTO {cls.TABLE} (email, password, account_type, pid, get_date, own, system_type)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        ON DUPLICATE KEY UPDATE password=VALUES(password), account_type=VALUES(account_type), get_date=VALUES(get_date), own=VALUES(own), system_type=VALUES(system_type)
+        """
+        mysql_pool.execute(sql, (user['email'], user['password'], user['account_type'], user['pid'], user['get_date'], user['own'], user['system_type'])) 
 
     @classmethod
     def get_users_by_emails(cls, emails: List[str]) -> Dict[str, Dict]:

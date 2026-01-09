@@ -1,8 +1,8 @@
 # af 相关的验证
 import json
-from turtle import pd
+from model import af_onelink_template
 from services.login_service import get_session_by_pid, get_session_by_user
-from model.user import PidConfigDAO, UserDAO
+from model.user import PidConfigDAO, AfUserDAO
 from model.af_handshake import AfHandshakeDAO
 import config.af_config as cfg
 from utils.retry import request_with_retry
@@ -122,40 +122,55 @@ def add_user_prt(pid:str,username:str, password:str, prt_list:list[str]):
 
 def prt_auth(pid:str, prt:str):
     """ pid 增加 prt 用于 Authorized agencies """
-    
+    new_prt_list = []
     # 检查 prt 是否为空
     if not prt:
         raise Exception("prt is empty")
 
+    if ',' in prt:
+        new_prt_list = prt.split(',')
+    else:
+        new_prt_list.append(prt)
+
     # 先从数据库握手表查该 pid 关联的所有 prt 做比较
-    user = UserDAO.get_user_by_pid(pid)
+    user = AfUserDAO.get_user_by_pid(pid)
     user_id = user["id"] if user and user["id"] else None
     if not user_id:
         raise Exception(f"No af_user.id found for pid {pid}")
 
     # 检查 prt 是否有效
-    if not is_prt_valid(pid, prt):
-        raise Exception(f"prt {prt} is invalid")
+    # if not is_prt_valid(pid, prt):
+    #     raise Exception(f"prt {prt} is invalid")
 
-    # 获取 pid 已授权的 prt 列表
-    prt_list = get_user_prt_list(pid, user["email"], user["password"])
-    if not prt_list:
-        raise Exception(f"failed to get prt list for pid {pid}")
+    local_prt_list = AfHandshakeDAO.get_prts_by_user(user_id)
+    if not local_prt_list or len(local_prt_list) < 1:
+        # 获取 pid 已授权的 prt 列表
+        prt_list = get_user_prt_list(pid, user["email"], user["password"])
+        if not prt_list:
+            raise Exception(f"failed to get prt list for pid {pid}")
+        local_prt_list = prt_list
 
+    append_prt_lsit = []
+
+    for new_prt in new_prt_list:
+        if new_prt not in local_prt_list and new_prt != "":
+            append_prt_lsit.append(new_prt)
+            
     # 若远端已包含该 prt，则无需重复添加，但同步握手关系
-    if prt in prt_list:
-        logger.info(f"prt {prt} already in list for pid {pid}")
-        try:
-            # 同步整表到远端列表
-            ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
-            logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
-        except Exception as e:
-            logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
-        return prt_list
+    # if prt in prt_list:
+    #     logger.info(f"prt {prt} already in list for pid {pid}")
+    #     try:
+    #         # 同步整表到远端列表
+    #         ret = AfHandshakeDAO.sync_user_prts(user_id, prt_list, status=1)
+    #         logger.info(f"prt {prt} sync to remote success for pid {pid}: {ret}")
+    #     except Exception as e:
+    #         logger.warning("Handshake sync failed (already exists): pid=%s prt=%s -> %s", pid, prt, e)
+    #     return prt_list
     
-    prt_list.append(prt)
+    # 合并新 prt 列表
+    local_prt_list.extend(append_prt_lsit)
     # 添加 prt 到 pid 授权列表
-    result = add_user_prt(pid, user["email"], user["password"], prt_list)
+    result = add_user_prt(pid, user["email"], user["password"], local_prt_list)
     try:
         AfHandshakeDAO.sync_user_prts(user_id, result, status=1)
     except Exception as e:
@@ -341,41 +356,9 @@ def set_pb_config(username:str, password:str, pid:str):
         logger.warning("Mark config active failed: id=%s, pid=%s, err=%s", cfg_id, pid, e)
         raise
 
-
 def set_adv_privacy(username:str = None, password:str = None, pid:str = None, append_note:str = ''):
     """设置广告隐私中的部分参数"""
-    note = ''
-    config_note = ''
-    if pid is None and username is not None:
-        user = UserDAO.get_user_by_email(username)
-        pid_config = PidConfigDAO.get_by_email(pid)
-        if user is None or user["pid"] is None or pid_config is None:
-            raise ValueError(f"User or User Pid not found for email: {username}")
-        if user:
-            pid = user["pid"]
-            username = user["email"]
-            password = user["password"]
-            note = user["note"]
-        if pid_config:
-            pid = pid_config["pid"]
-            config_note = pid_config["note"]
-            username = pid_config["email"]
-            password = pid_config["password"]
-
-    if pid is not None and (username is None or password is None):
-        user = UserDAO.get_user_by_pid(pid)
-        pid_config = PidConfigDAO.get_by_pid(pid)
-        if user is None or user["email"] is None or user["password"] is None or pid_config is None:
-            raise ValueError(f"User or User Credentials not found for pid: {pid}")
-        if user:
-            note = user["note"]
-            username = user["email"]
-            password = user["password"]
-        if pid_config:
-            config_note = pid_config["note"]
-            username = pid_config["email"]
-            password = pid_config["password"]
-
+    
     if pid is None or username is None or password is None:
         raise ValueError("pid, username, password are required")
     
@@ -401,7 +384,8 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
         logger.info("GET adv privacy data success")
 
         append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)"
-        inappevent_val= inappevent_val[0] + append_arg
+        inapp_append_arg = "$$sdk(af_siteid)&privacy_params=$$sdk(af_sub_siteid)&subid=$$sdk(af_c_id)&geo=$$sdk(country-code)&_u_=$$sdk(af_ad_id)&subid3=$$sdk(c)&adsetid=$$sdk(af_adset_id)&eventtime=$$sdk(install-ts-hour-floor)&clicktime=$$sdk(click-ts-hour-floor)&_c_=$$sdk(af_ad)&subid7=$$sdk(blocked-reason)&subid8=$$sdk(blocked-reason-value)&subid9=$$sdk(blocked-sub-reason)&Is-first-event=$$sdk(is-first)&Is_primary_attribution=$$sdk(is-primary)&Is-reattribution=$$sdk(is-reattr)&Is-reengagement=$$sdk(is-reengage)&Is-rejected=$$sdk(is-rejected)&Is-retargeting=$$sdk(is-retarget)&Is-s2s=$$sdk(is-s2s-0-or-1)&postbackid=$$sdk(random-str)&eventid=$$sdk(mapped-iae)&task_time=$$sdk(action-type)&event=$$sdk(event-name)"
+        inappevent_val= inappevent_val[0] + inapp_append_arg
         install_val = install_val[0] + append_arg
         new_data = {
             "install": {
@@ -417,13 +401,8 @@ def set_adv_privacy(username:str = None, password:str = None, pid:str = None, ap
         resp.raise_for_status()
         logger.info("SET adv privacy data success")
 
-        PidConfigDAO.update_note_by_pid(pid, config_note or '' + append_note)
-        UserDAO.update_note_by_pid(pid, note or '' + append_note)
-
     except Exception as e:
         logger.warning("SET adv privacy failed for %s -> %s", pid, e)
-        PidConfigDAO.update_note_by_pid(pid, config_note or '' + "|刷新失败")
-        UserDAO.update_note_by_pid(pid, note or '' + "|刷新失败")
         raise
 
 

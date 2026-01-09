@@ -9,7 +9,7 @@ import random
 from datetime import date
 from typing import Dict, Any
 
-from model.user import UserDAO
+from model.user import AfUserDAO
 from services.app_service import fetch_and_save_apps
 from config.settings import CRAWLER
 from core.logger import setup_logging  # noqa: F401  # 触发日志初始化
@@ -33,7 +33,7 @@ def sync_user_apps(username: str) -> Dict[str, Any]:
         logger.info(f"Starting app sync for user: {username}")
         
         # 获取用户信息
-        user = UserDAO.get_user_by_email(username)
+        user = AfUserDAO.get_user_by_email(username)
         if not user:
             raise ValueError(f"User not found: {username}")
         
@@ -82,7 +82,7 @@ def run():
     TaskDAO.init_table()
     
     if not TaskDAO.fetch_pending('user_apps', 1):
-        users = UserDAO.get_enabled_users()
+        users = AfUserDAO.get_enabled_users()
         init_tasks = [{
             'task_type': 'user_apps',
             'username': u['email'],
@@ -94,7 +94,7 @@ def run():
     logger.info("pending user_apps=%d", len(pending))
 
     usernames = [t['username'] for t in pending]
-    users_map = UserDAO.get_users_by_emails(usernames)
+    users_map = AfUserDAO.get_users_by_emails(usernames)
 
     tasks = [ (t['id'], users_map[t['username']]) for t in pending if t['username'] in users_map ]
 
