@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserCon
 import time
 import threading
 from model.cookie import cookie_model
-from config.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES, CRAWLER, USE_PROXY
+from setting.settings import PLAYWRIGHT, SESSION_EXPIRE_MINUTES, CRAWLER, USE_PROXY
 from services.otp_service import get_2fa_code_by_username
 from services.auth_service import whoami_check
 
@@ -411,7 +411,7 @@ class SessionManager:
             
             base_cookies = ctx.cookies()
             
-            import config.af_config as cfg, requests
+            import setting.af_config as cfg, requests
 
             s = requests.Session()
             for c in base_cookies:
@@ -450,7 +450,7 @@ class SessionManager:
         proxies: Optional[dict] = None,
     ) -> tuple[list, datetime, str]:
 
-        import config.af_config as cfg
+        import setting.af_config as cfg
 
         s, final_cookies, headers,ua = self._get_bw_session_by_playwright(
             username,

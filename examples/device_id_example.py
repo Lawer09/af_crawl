@@ -21,7 +21,7 @@ from utils.device_id_generator import (
     generate_device_id, generate_master_id, generate_worker_id, 
     generate_standalone_id, validate_device_id
 )
-from config.distribution_config import (
+from setting.distribution_config import (
     DistributionConfig, create_config_template, DistributionMode
 )
 from cli.distribution_cli import DistributionCLI

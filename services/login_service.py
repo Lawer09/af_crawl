@@ -7,7 +7,7 @@ import logging
 from requests import Session
 from core.session import session_manager
 from core.proxy import proxy_pool, ProxyPool
-from config.settings import USE_PROXY
+from setting.settings import USE_PROXY
 from model.user import AfUserDAO, UserProxyDAO
 from services.otp_service import (
     get_2fa_code_by_pid as _get_2fa_code_by_pid,

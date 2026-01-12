@@ -6,8 +6,8 @@ import logging
 import random
 import time
 from typing import Any, Dict, Optional
-from config.settings import CRAWLER
-import config.af_config as cfg
+from setting.settings import CRAWLER
+import setting.af_config as cfg
 import requests
 from model.cookie import cookie_model
 import re

@@ -10,7 +10,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from config.distribution_config import get_distribution_config, DistributionConfig
+from setting.distribution_config import get_distribution_config, DistributionConfig
 
 logger = logging.getLogger(__name__)
 

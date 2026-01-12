@@ -8,7 +8,7 @@ from typing import Optional
 
 import requests
 
-from config.settings import FEISHU, SYSTEM_TYPE
+from setting.settings import FEISHU, SYSTEM_TYPE
 
 FEISHU_BOT_HOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/067033b4-ac8d-4f41-85ec-4852df148932"
 

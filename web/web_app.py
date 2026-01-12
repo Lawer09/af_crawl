@@ -3,7 +3,7 @@ import uvicorn
 
 from api.distribution_api import router as distribution_router, init_distribution_services
 from api.tool_api import router as tool_router
-from config.distribution_config import get_distribution_config
+from setting.distribution_config import get_distribution_config
 
 app = FastAPI(title="分布式任务系统API", description="分布式爬虫任务管理API")
 

@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Tuple, Optional
 import mysql.connector
 from mysql.connector.pooling import MySQLConnectionPool, PooledMySQLConnection
-from config.settings import MYSQL, REPORT_MYSQL
+from setting.settings import MYSQL, REPORT_MYSQL
 import time
 import os
 import threading

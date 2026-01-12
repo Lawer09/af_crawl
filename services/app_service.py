@@ -8,7 +8,7 @@ from model.user_app import UserAppDAO
 from model.user import AfUserDAO, UserProxyDAO
 from services.fs_service import send_sys_notify
 
-import config.af_config as cfg
+import setting.af_config as cfg
 from utils.retry import request_with_retry
 
 logger = logging.getLogger(__name__)

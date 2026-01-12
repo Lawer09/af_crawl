@@ -11,7 +11,7 @@ from typing import Dict, Any
 
 from model.user import AfUserDAO
 from services.app_service import fetch_and_save_apps
-from config.settings import CRAWLER
+from setting.settings import CRAWLER
 from core.logger import setup_logging  # noqa: F401  # 触发日志初始化
 from model.task import TaskDAO
 

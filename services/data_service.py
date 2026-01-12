@@ -3,8 +3,8 @@ from typing import List, Dict
 import logging
 import random
 from datetime import datetime, timedelta
-import config.af_config as cfg
-from config.settings import AF_DATA_FILTERS, CRAWLER, SYSTEM_TYPE
+import setting.af_config as cfg
+from setting.settings import AF_DATA_FILTERS, CRAWLER, SYSTEM_TYPE
 from model.task import AfTaskRetDAO
 from services.fs_service import send_message
 from services.login_service import get_session_by_pid

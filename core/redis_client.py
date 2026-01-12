@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def _load_config_from_sources() -> dict:
     settings_cfg: Optional[dict] = None
     try:
-        import config.settings as settings  # type: ignore
+        import setting.settings as settings  # type: ignore
         settings_cfg = getattr(settings, "REDIS", None)
     except Exception:
         settings_cfg = None

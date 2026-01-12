@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 import requests
 
-from config.settings import PROXY, USE_PROXY
+from setting.settings import PROXY, USE_PROXY
 
 logger = logging.getLogger(__name__)
 

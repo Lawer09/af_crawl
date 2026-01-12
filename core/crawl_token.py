@@ -4,7 +4,7 @@ from typing import Optional
 
 from playwright.sync_api import sync_playwright
 
-from config.settings import PLAYWRIGHT
+from setting.settings import PLAYWRIGHT
 
 
 def _sanitize_user_agent(ua: Optional[str]) -> Optional[str]:

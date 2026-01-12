@@ -28,7 +28,7 @@ from fastapi import FastAPI
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.distribution_config import (
+from setting.distribution_config import (
     DistributionConfig, DistributionMode, LoadBalanceStrategy,
     get_distribution_config, set_distribution_config,
     load_distribution_config_from_file, save_distribution_config_to_file,

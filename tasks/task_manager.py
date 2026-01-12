@@ -3,7 +3,7 @@
 import logging
 import time
 from zoneinfo import ZoneInfo
-from config.settings import CRAWLER, SYSTEM_TYPE
+from setting.settings import CRAWLER, SYSTEM_TYPE
 from model.task import TaskDAO
 from datetime import datetime, timedelta
 

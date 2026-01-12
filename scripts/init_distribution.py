@@ -16,7 +16,7 @@ from model.device import DeviceDAO
 from model.task_assignment import TaskAssignmentDAO
 from model.device_heartbeat import DeviceHeartbeatDAO
 from model.task import TaskDAO
-from config.distribution_config import DistributionConfig, DistributionMode
+from setting.distribution_config import DistributionConfig, DistributionMode
 from core.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ def verify_installation():
                 logger.info(f"Table {table}: OK")
         
         # 测试配置加载
-        from config.distribution_config import get_distribution_config
+        from setting.distribution_config import get_distribution_config
         config = get_distribution_config()
         logger.info(f"Configuration loaded: mode={config.mode.value}")
         

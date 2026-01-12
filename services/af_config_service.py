@@ -4,7 +4,7 @@ from model import af_onelink_template
 from services.login_service import get_session_by_pid, get_session_by_user
 from model.user import PidConfigDAO, AfUserDAO
 from model.af_handshake import AfHandshakeDAO
-import config.af_config as cfg
+import setting.af_config as cfg
 from utils.retry import request_with_retry
 import logging
 from model.af_pb_config import AfPbConfigDAO

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 import threading
 
 from client.distribution_client import get_distribution_client, get_async_distribution_client
-from config.distribution_config import get_distribution_config
+from setting.distribution_config import get_distribution_config
 
 logger = logging.getLogger(__name__)
 

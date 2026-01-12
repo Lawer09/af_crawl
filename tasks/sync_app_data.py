@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
-from config.settings import CRAWLER
+from setting.settings import CRAWLER
 from core.logger import setup_logging  # noqa
 
 logger = logging.getLogger(__name__)

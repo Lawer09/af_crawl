@@ -1,23 +1,17 @@
 from __future__ import annotations
-
-"""命令行入口：
-$ python main.py sync_apps          # 同步用户 App 列表
-$ python main.py sync_data --days 7 # 同步最近 7 天数据
-$ python main.py web               # 启动Web管理界面
-$ python main.py distribute master  # 启动分布式主节点
-$ python main.py distribute worker --master-host localhost --port 7989  # 启动分布式工作节点
-
-"""
-
 import argparse
 import logging
 import sys
 from pathlib import Path
 
-from core.logger import setup_logging  # noqa
-from config.settings import USE_PROXY, CRAWLER
+from core import logger
+from setting import config
 
-logger = logging.getLogger(__name__)
+logger.setup_logging(logging.INFO)
+config.setup()
+
+
+log = logging.getLogger(__name__)
 
 def _parse_args():
     parser = argparse.ArgumentParser(description="AppsFlyer Crawler")
@@ -91,14 +85,8 @@ def _parse_args():
 
 def _print_startup_info():
     """打印启动配置信息"""
-    logger.info("=" * 50)
-    logger.info("启动配置信息:")
-    logger.info("代理状态: %s", "开启" if USE_PROXY else "关闭")
-    logger.info("进程数: %d", CRAWLER["processes"])
-    logger.info("每进程线程数: %d", CRAWLER["threads_per_process"])
-    logger.info("最大重试次数: %d", CRAWLER["max_retry"])
-    logger.info("重试延迟: %d秒", CRAWLER["retry_delay_seconds"])
-    logger.info("=" * 50)
+    log.info("=" * 50)
+    log.info("=" * 50)
 
 
 if __name__ == "__main__":
@@ -109,14 +97,14 @@ if __name__ == "__main__":
 
     if args.command == "sync_apps":
         from services import app_service
-        logger.info("=== sync_apps start ===")
+        log.info("=== sync_apps start ===")
         app_service.update_user_apps()
 
     elif args.command == "web":
         from web_app import app
         import uvicorn
         
-        logger.info("=== Starting web server ===")
+        log.info("=== Starting web server ===")
         uvicorn.run(app, host="0.0.0.0", port=8880)
     
     elif args.command == "distribute":
@@ -126,18 +114,18 @@ if __name__ == "__main__":
         cli = DistributionCLI()
         
         if args.distribute_command == "master":
-            logger.info("=== Starting distribution master ===")
+            log.info("=== Starting distribution master ===")
             sys.exit(cli.run_master(args))
         elif args.distribute_command == "worker":
-            logger.info("=== Starting distribution worker ===")
+            log.info("=== Starting distribution worker ===")
             sys.exit(cli.run_worker(args))
         elif args.distribute_command == "standalone":
-            logger.info("=== Starting distribution standalone ===")
+            log.info("=== Starting distribution standalone ===")
             sys.exit(cli.run_standalone(args))
         elif args.distribute_command == "status":
             sys.exit(cli.show_status(args))
         else:
-            logger.error("unknown distribute command: %s", args.distribute_command)
+            log.error("unknown distribute command: %s", args.distribute_command)
             sys.exit(1)
 
     elif args.command == "cron":
@@ -150,7 +138,7 @@ if __name__ == "__main__":
             run_data()
             started = True
         if not started:
-            logger.error("请至少选择一个定时任务，例如: --apps 或 --data")
+            log.error("请至少选择一个定时任务，例如: --apps 或 --data")
             sys.exit(1)
         # try:
         #     while True:
@@ -166,27 +154,27 @@ if __name__ == "__main__":
         try:
             faulthandler.dump_traceback_later(600, repeat=True, file=_dump_file)
         except Exception:
-            logger.warning("faulthandler 初始化失败，跳过线程栈转储")
+            log.warning("faulthandler 初始化失败，跳过线程栈转储")
         task_manager.run()
 
     elif args.command == "create_tasks":
         from services import task_service
-        logger.info("=== create_tasks start ===")
+        log.info("=== create_tasks start ===")
         task_service.create_af_now_task()
     
     elif args.command == "sched":
         from schedulers.af_jobs import run_jobs
-        logger.info("=== run_jobs start ===")
+        log.info("=== run_jobs start ===")
         run_jobs()
 
     elif args.command == "sched_once":
         from schedulers.af_jobs import run_jobs_once
-        logger.info("=== run_jobs_once start ===")
+        log.info("=== run_jobs_once start ===")
         run_jobs_once()
 
     elif args.command == "sync_adv_privacy":
         from services import af_config_service
-        logger.info("=== sync_adv_privacy start ===")
+        log.info("=== sync_adv_privacy start ===")
         af_config_service.sync_adv_privacy()
         
 
@@ -194,7 +182,7 @@ if __name__ == "__main__":
         from scripts import system_init
 
     else:
-        logger.error("unknown command: %s", args.command)
+        log.error("unknown command: %s", args.command)
         sys.exit(1)
 
 
